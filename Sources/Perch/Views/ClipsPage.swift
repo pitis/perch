@@ -13,9 +13,10 @@ struct ClipsPage: View {
             if clips.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "paperclip").font(.system(size: 24)).foregroundStyle(.white.opacity(0.4))
-                    Text("Take a screenshot or copy something and it hangs here.")
+                    Text("Copy something and it hangs here.")
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
                     Text("You can also drag a file onto the notch.").font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+                    screenshotsButton.padding(.top, 6)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -31,6 +32,7 @@ struct ClipsPage: View {
                 }
                 .frame(maxHeight: .infinity)
                 HStack {
+                    screenshotsButton
                     Spacer()
                     Text("Click to copy · Double-click to open · Drag to move or share · ⌘V to paste")
                         .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
@@ -42,6 +44,23 @@ struct ClipsPage: View {
             }
         }
         .onAppear(perform: hub.clips.pruneMissing)
+    }
+
+    @ViewBuilder
+    private var screenshotsButton: some View {
+        if !hub.workspace.data.settings.captureScreenshots {
+            Button {
+                hub.workspace.data.settings.captureScreenshots = true
+                hub.clips.updateScreenshotWatcher()
+            } label: {
+                Text("Show screenshots here")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(.white.opacity(0.1), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("macOS asks once for access to your Desktop folder, where screenshots are saved")
+        }
     }
 }
 
