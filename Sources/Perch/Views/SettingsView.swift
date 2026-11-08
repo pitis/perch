@@ -92,13 +92,13 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Suggest a priority and project", isOn: $ws.data.settings.autoClassify)
+                Toggle("Fill in priority, project and dates", isOn: $ws.data.settings.autoClassify)
                     .disabled(!AutoClassifier.isAvailable)
             } header: {
                 Text("Apple Intelligence")
             } footer: {
                 Text(AutoClassifier.isAvailable
-                    ? "New tasks get a priority and project from Apple's on-device model. Anything you set yourself is left alone."
+                    ? "New tasks get a priority and project from Apple's on-device model, and their date when it's written in a language other than English or Romanian. Anything you set yourself is left alone."
                     : "Needs macOS 26 with Apple Intelligence turned on.")
             }
 

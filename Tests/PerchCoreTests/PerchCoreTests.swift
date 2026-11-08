@@ -109,6 +109,38 @@ final class NLParserTests: XCTestCase {
         }
     }
 
+    func testRomanian() {
+        let call = parse("sună-o pe mama mâine la 5")
+        XCTAssertEqual(call.title, "Sună-o pe mama")
+        XCTAssertEqual(clock(call.reminderAt), "2026-11-08 17:00")
+        XCTAssertEqual(parse("plătește chiria până vineri").deadline, "2026-11-13")
+        XCTAssertEqual(parse("plătește chiria până vineri").title, "Plătește chiria")
+        let gym = parse("sală în fiecare luni și joi la 7 seara")
+        XCTAssertEqual(gym.title, "Sală")
+        XCTAssertEqual(gym.repeatRule?.weekdays, [2, 5])
+        XCTAssertEqual(clock(gym.reminderAt), "2026-11-09 19:00")
+        XCTAssertEqual(parse("raport poimâine").day, "2026-11-09")
+        let meeting = parse("întâlnire pe 3 decembrie la ora 14:30")
+        XCTAssertEqual(meeting.title, "Întâlnire")
+        XCTAssertEqual(clock(meeting.reminderAt), "2026-12-03 14:30")
+        XCTAssertEqual(clock(parse("verifică mailul în 30 de minute").reminderAt), "2026-11-07 10:30")
+        XCTAssertEqual(clock(parse("sună la service peste două ore").reminderAt), "2026-11-07 12:00")
+        XCTAssertEqual(parse("vacanță peste 3 luni").day, "2027-02-07")
+        XCTAssertEqual(clock(parse("film diseară").reminderAt), "2026-11-07 20:00")
+        XCTAssertEqual(parse("curățenie sâmbăta viitoare").day, "2026-11-14")
+        XCTAssertEqual(parse("x în fiecare zi").repeatRule, RepeatRule(kind: .daily))
+        XCTAssertEqual(parse("x azi").day, "2026-11-07")
+        XCTAssertEqual(parse("x pe 25.12", locale: "ro_RO").title, "X")
+        XCTAssertEqual(parse("factura până la 3 decembrie").deadline, "2026-12-03")
+        let plain = parse("suna-l pe Ion maine dimineata")
+        XCTAssertEqual(plain.title, "Suna-l pe Ion", "diacritics are optional")
+        XCTAssertEqual(clock(plain.reminderAt), "2026-11-08 09:00")
+        for text in ["du-te la magazin", "cumpără lapte", "mai multe ouă", "lunar eclipse photos", "pune pe 2 farfurii", "bilete LA 2028"] {
+            XCTAssertNil(parse(text).day, text)
+            XCTAssertEqual(parse(text).title.lowercased(), text.lowercased(), text)
+        }
+    }
+
     func testAllDetailsAndNoTitleKeepsSomethingToShow() {
         XCTAssertEqual(parse("tomorrow").title, "Tomorrow")
     }
@@ -127,6 +159,32 @@ final class RepeatTests: XCTestCase {
 }
 
 final class WorkspaceTests: XCTestCase {
+    func testAnotherReadingOfThePhraseSchedulesIt() {
+        let (w, _) = makeWorkspace()
+        let dentist = w.add("Zahnarzt am Dienstag um 14 Uhr", defaultDay: nil)!
+        XCTAssertNil(dentist.day, "the parser doesn't read German")
+        w.applySchedule(dentist.id, title: "Zahnarzt", when: "tuesday at 2pm", ifUnchangedSince: dentist)
+        XCTAssertEqual(w.task(dentist.id)?.title, "Zahnarzt")
+        XCTAssertEqual(w.task(dentist.id)?.day, "2026-11-10")
+        XCTAssertEqual(clock(w.task(dentist.id)?.reminderAt), "2026-11-10 14:00")
+
+        let rent = w.add("Miete zahlen bis Freitag", defaultDay: w.today)!
+        w.applySchedule(rent.id, title: "Miete zahlen", when: "by friday", ifUnchangedSince: rent)
+        XCTAssertEqual(w.task(rent.id)?.deadline, "2026-11-13")
+        XCTAssertEqual(w.task(rent.id)?.day, w.today, "a deadline keeps the day it was added to")
+
+        let edited = w.add("Steuer machen am Montag", defaultDay: nil)!
+        w.update(edited.id) { $0.title = "Steuer" }
+        w.applySchedule(edited.id, title: "Steuer machen", when: "monday", ifUnchangedSince: edited)
+        XCTAssertNil(w.task(edited.id)?.day, "an edit made meanwhile wins")
+
+        let milk = w.add("Milch kaufen", defaultDay: nil)!
+        w.applySchedule(milk.id, title: "Milch", when: "", ifUnchangedSince: milk)
+        XCTAssertEqual(w.task(milk.id)?.title, "Milch kaufen", "nothing changes without a date")
+        w.applySchedule(milk.id, title: "Milch kaufen", when: "today", ifUnchangedSince: milk)
+        XCTAssertNil(w.task(milk.id)?.day, "a date that took no words from the text was made up")
+    }
+
     func testCompletingARepeatCreatesTheNextAndUndoTakesItBack() {
         let (w, _) = makeWorkspace()
         let t = w.add("gym every day at 6pm", defaultDay: w.today)!
