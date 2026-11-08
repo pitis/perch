@@ -379,7 +379,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var reminderListId: String?
     public var calendarEnabled = false
     public var captureCopied = true
-    public var captureScreenshots = true
+    /// Off until asked for: watching the screenshot folder is what makes macOS prompt for Desktop access.
+    public var captureScreenshots = false
     public var autoClassify = true
     public var blackAndWhite = false
     public var clockStyle = ClockStyle.dots
