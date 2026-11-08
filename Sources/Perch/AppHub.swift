@@ -162,6 +162,15 @@ final class AppHub {
         }
     }
 
+    /// Replaces all planner data with `backup`. Returns where the data it replaced was kept.
+    func restoreBackup(_ backup: AppData) throws -> URL {
+        guard let store else { throw CocoaError(.featureUnsupported) }
+        let copy = try workspace.restore(backup, keepingCopyIn: store)
+        ui.editingTask = nil // the task may not exist in the backup, and an open editor keeps the panel from closing
+        saveNow()
+        return copy
+    }
+
     func prepareForQuit() {
         workspace.focusPause()
         saveNow()

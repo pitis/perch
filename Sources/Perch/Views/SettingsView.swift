@@ -8,7 +8,7 @@ struct SettingsView: View {
     @Environment(AppHub.self) private var hub
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
-    @State private var exportMessage: String?
+    @State private var backupMessage: String?
 
     var body: some View {
         @Bindable var ws = hub.workspace
@@ -104,9 +104,12 @@ struct SettingsView: View {
 
             Section("Your data") {
                 LabeledContent("Backup") {
-                    Button("Export JSON…", action: exportBackup).controlSize(.small)
+                    HStack {
+                        Button("Export JSON…", action: exportBackup).controlSize(.small)
+                        Button("Restore…", action: restoreBackup).controlSize(.small)
+                    }
                 }
-                if let exportMessage { Text(exportMessage).font(.caption).foregroundStyle(.secondary) }
+                if let backupMessage { Text(backupMessage).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 Button("Allow notifications while Perch is closed…") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
                         NSWorkspace.shared.open(url)
@@ -141,9 +144,42 @@ struct SettingsView: View {
             guard response == .OK, let url = panel.url else { return }
             do {
                 try hub.workspace.exportJSON().write(to: url, options: .atomic)
-                exportMessage = "Saved to \(url.lastPathComponent)."
+                backupMessage = "Saved to \(url.lastPathComponent)."
             } catch {
-                exportMessage = "Couldn't save: \(error.localizedDescription)"
+                backupMessage = "Couldn't save: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func restoreBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let name = url.lastPathComponent
+            let backup: AppData
+            do {
+                backup = try Store.decoder.decode(AppData.self, from: Data(contentsOf: url))
+            } catch is DecodingError {
+                backupMessage = "\(name) isn't a Perch backup. Nothing was changed."
+                return
+            } catch {
+                backupMessage = "Couldn't read \(name): \(error.localizedDescription)"
+                return
+            }
+
+            let alert = NSAlert()
+            alert.messageText = "Replace your Perch data with this backup?"
+            alert.informativeText = "Your tasks, notes, focus history and settings will be replaced by the ones in \(name). A copy of your current data is kept first."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            do {
+                let copy = try hub.restoreBackup(backup)
+                backupMessage = "Restored \(name). Your previous data is in \((copy.path as NSString).abbreviatingWithTildeInPath)."
+            } catch {
+                backupMessage = "Couldn't restore: \(error.localizedDescription) Nothing was changed."
             }
         }
     }

@@ -127,6 +127,7 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Full dashboard window
 - Launch at login
 - JSON backup export
+- Restoring a JSON backup, after a confirmation and keeping a copy of the current data; files that aren't backups are refused (unit-tested) ([#20](https://github.com/pitis/perch/issues/20))
 
 ## Not done: not built yet
 
@@ -136,7 +137,6 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
 - Languages other than English, numeric dates such as 12/25, and detecting recordings without their English file name ([#18](https://github.com/pitis/perch/issues/18))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
-- Restoring from a JSON backup, which goes beyond the reference product ([#20](https://github.com/pitis/perch/issues/20))
 
 ## Left out on purpose
 

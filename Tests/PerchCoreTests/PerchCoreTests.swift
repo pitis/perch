@@ -440,6 +440,45 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(back.tasks.first?.title, "good")
         XCTAssertEqual(String(decoding: try Data(contentsOf: aside), as: UTF8.self), "not json", "kept for inspection")
     }
+
+    func testRestoreKeepsACopyOfTheCurrentDataThenReplacesIt() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        old.add("restored", defaultDay: nil)
+        old.focusStart(minutes: 25)
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        XCTAssertEqual(w.data.tasks.map(\.title), ["Restored"])
+        XCTAssertEqual(w.data.focus.phase, .paused, "a timer running in the backup would count all the time since")
+        XCTAssertEqual(copy.deletingLastPathComponent(), url.deletingLastPathComponent())
+        XCTAssertNotEqual(copy, url)
+        XCTAssertEqual(try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy)), before)
+    }
+
+    func testRestoreChangesNothingIfTheCopyCantBeWritten() {
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        var backup = AppData()
+        backup.tasks = [TaskItem(title: "restored")]
+        XCTAssertThrowsError(try w.restore(backup, keepingCopyIn: Store(url: tempURL()))) // its folder doesn't exist
+        XCTAssertEqual(w.data, before)
+    }
+
+    func testFilesThatArentBackupsAreRejected() throws {
+        for raw in ["", "not json", "[]", "{}", #"{"tasks":"no"}"#, #"{"tasks":[{"title":"no id"}]}"#] {
+            XCTAssertThrowsError(try Store.decoder.decode(AppData.self, from: Data(raw.utf8)), raw) { error in
+                XCTAssertTrue(error is DecodingError, "the Settings message relies on it: \(raw)")
+            }
+        }
+        XCTAssertNoThrow(try Store.decoder.decode(AppData.self, from: Workspace().exportJSON()))
+    }
 }
 
 final class AgentConfigTests: XCTestCase {

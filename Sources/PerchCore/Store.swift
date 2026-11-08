@@ -42,10 +42,22 @@ public struct Store {
         if let data = decode(url) { return .loaded(data) }
 
         // Never let the next save overwrite a file we couldn't read.
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        let aside = url.deletingPathExtension().appendingPathExtension("corrupt-\(stamp).json")
+        let aside = stamped("corrupt")
         try? fm.moveItem(at: url, to: aside)
         return .recovered(decode(backup) ?? AppData(), corruptCopy: aside)
+    }
+
+    /// Writes `data` beside the store in the export format, so it can be restored like any backup. Returns the file.
+    public func keepCopy(_ data: AppData) throws -> URL {
+        let copy = stamped("before-restore")
+        try Store.encoder.encode(data).write(to: copy, options: .withoutOverwriting)
+        return copy
+    }
+
+    /// `store.<label>-<time>.json`, next to the store.
+    private func stamped(_ label: String) -> URL {
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        return url.deletingPathExtension().appendingPathExtension("\(label)-\(stamp).json")
     }
 
     private func decode(_ file: URL) -> AppData? {

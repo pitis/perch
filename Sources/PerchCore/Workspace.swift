@@ -381,4 +381,13 @@ public final class Workspace {
     public func exportJSON() throws -> Data {
         try Store.encoder.encode(data)
     }
+
+    /// Replaces all data with a backup, after keeping a copy of the current data beside `store`, and returns that copy.
+    /// If the copy can't be written, nothing changes.
+    public func restore(_ backup: AppData, keepingCopyIn store: Store) throws -> URL {
+        let copy = try store.keepCopy(data)
+        data = backup
+        recoverFocusAfterLaunch() // a timer running in the backup would count all the time since it was made
+        return copy
+    }
 }
