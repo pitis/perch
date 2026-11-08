@@ -32,7 +32,7 @@ make dmg                                    # dist/Perch-<version>.dmg, from a c
 
 - **Days are local `yyyy-MM-dd` strings** (`Day`), so a task stays on Friday across time zones and string order is date order. A nil `day` means the Inbox.
 - **New persisted fields must use `lenient` in the type's custom `init(from:)`.** Synthesized decoding would throw on older files and lose the user's data.
-- **Perch's bird is drawn in `Views/AppMark.swift`, never an SF Symbol.** Apple's license doesn't allow SF Symbols in an app icon or logo. The icon, the menu bar, the panel header and the reminder card all use it. After changing it, run `make icon` and commit `scripts/AppIcon.icns`.
+- **Perch's bird is drawn in `Views/AppMark.swift`, never an SF Symbol.** Apple's license doesn't allow SF Symbols in an app icon or logo. The icon, the menu bar, the panel header and the reminder card all use it. After changing it, run `make icon` and commit `scripts/AppIcon.icns` and `docs/images/icon.png`.
 - **Don't use popovers or sheets inside the notch panel.** `NotchController.mayAutoClose` doesn't know about them, so the panel would close underneath them. Build inline overlays like `TaskEditor`, and use `Menu` freely.
 - **Blocking file access stays off the main thread.** Touching a protected folder can block on a macOS prompt.
 - **Don't touch the Desktop folder unless `captureScreenshots` is on.** It's off by default, because watching that folder is what triggers the prompt.

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Perch's mark: a small bird on a branch, drawn in a 100×100 box. The app icon (`make icon`), the
-/// panel header and the reminder card all use it. It's drawn here because an SF Symbol can't be an
+/// menu bar, the panel header and the reminder card all use it. It's drawn here because an SF Symbol can't be an
 /// app icon or logo.
 struct PerchedBird: Shape {
     func path(in rect: CGRect) -> Path {
@@ -33,7 +33,7 @@ struct PerchedBird: Shape {
         return bird.union(branch)
     }
 
-    /// The bird alone, 15 points tall and cropped to its outline, as a template image so macOS tints
+    /// The bird and branch without the square, 15 points tall and cropped to its outline, as a template image so macOS tints
     /// it for light and dark menu bars.
     static var menuBarImage: NSImage {
         let bird = PerchedBird().path(in: CGRect(x: 0, y: 0, width: 100, height: 100))
