@@ -32,9 +32,23 @@ While the panel is closed, a reminder that's due and a running timer show up aro
 
 ## Status
 
-Perch is young. Everything above is built, but much of it hasn't been tried in the real app yet. [product.md](product.md) says what's confirmed working and what isn't, and the pinned [feature checklist](https://github.com/pitis/perch/issues/1) tracks the rest. There's no download yet, so you build it from source.
+Perch is young. Everything above is built, but much of it hasn't been tried in the real app yet. [product.md](product.md) says what's confirmed working and what isn't, and the pinned [feature checklist](https://github.com/pitis/perch/issues/1) tracks the rest. Version 0.1 is a pre-release.
 
-## Build and install
+## Install
+
+You need macOS 14 or later on Apple silicon. Download `Perch-0.1.dmg` from [Releases](https://github.com/pitis/perch/releases), open it and drag Perch to Applications.
+
+Perch isn't notarized by Apple, which needs a paid developer account, so macOS refuses to open it the first time:
+
+1. Open Perch, and click Done on the warning.
+2. In System Settings › Privacy & Security, scroll down to Security and click Open Anyway next to Perch.
+3. Confirm with your password or Touch ID. From then on it opens normally.
+
+On macOS 14 you can instead right-click Perch in Applications and choose Open.
+
+It has no Dock icon: it lives in the notch and the menu bar. It also takes over Option-N, so on a US keyboard that shortcut no longer types ñ.
+
+## Build from source
 
 You need macOS 14 or later on Apple silicon, and Xcode. Xcode 16 should be enough, though it's only been built with Xcode 27 so far, and the Apple Intelligence suggestions need Xcode 26 or later.
 
@@ -44,7 +58,7 @@ cd perch
 ./scripts/build.sh --install
 ```
 
-That builds `Perch.app`, puts it in `/Applications` and launches it. It has no Dock icon: it lives in the notch and the menu bar. It also takes over Option-N, so on a US keyboard that shortcut no longer types ñ.
+That builds `Perch.app`, puts it in `/Applications` and launches it.
 
 The build is signed with the first Apple Development certificate in your keychain. Without one it's signed ad hoc, and macOS asks for permissions again after every rebuild. Any Apple ID can make one in Xcode › Settings › Accounts › Manage Certificates.
 
