@@ -5,11 +5,15 @@ A personal macOS app that lives in the notch: tasks, notes, focus timers, calend
 ## Commands
 
 ```sh
-swift test                                  # logic tests (no linter is configured)
+make check                                  # the gate: swift test (no linter is configured)
 swift test --filter NLParserTests/testTimes # one test
 ./scripts/build.sh                          # builds and signs dist/Perch.app
 ./scripts/build.sh --install                # replaces /Applications/Perch.app and launches it
 swift build && .build/debug/Perch --snapshot <folder>  # renders every screen to PNG with sample data
+make shots out=<folder>                     # the same, from where this branch forked and from this checkout
+make worktree name=<slug> branch=<type>/<slug>  # see Worktrees
+make update                                 # merge the latest base into this branch
+make setup                                  # once per clone: enables .githooks/
 ```
 
 `--snapshot` is how to look at UI changes: shells here have no Screen Recording permission, so `screencapture` fails.
@@ -45,10 +49,38 @@ The user runs this app for real, so testing must not interrupt them or touch the
 
 - **Never launch copies under a new bundle ID, or do anything else that raises macOS permission prompts.** Each new ID makes macOS ask again, which already caused repeated prompts on the user's screen.
 - **Don't change the user's clipboard, or print its contents.** `pbcopy` loses images and formatting even if you restore it.
-- **Keep live test data away from the real store** by setting `CFFIXED_USER_HOME` to a short path such as `.build/e2e`. Longer paths fail, because Unix socket paths are limited to 104 characters. The app logs this and turns MCP off.
+- **Keep live test data away from the real store** by setting `CFFIXED_USER_HOME` to a short path such as `.build/e2e`. The socket is `<home>/Library/Application Support/Perch/mcp.sock`, and macOS allows 103 bytes, so the fake home must resolve to an absolute path of at most 60. Otherwise the app logs it and turns MCP off. From a worktree, `.build/e2e` is already too long, so use `/tmp/perch-<n>` there.
+- **`./scripts/build.sh --install` replaces the copy the user runs every day.** Only run it from `main`, or after asking.
 - **That fake home changes what you're testing.** It also redirects the Desktop, and launching from a shell attributes permissions to the parent process, so prompts behave differently. Only `open` matches a real launch.
 - **Ask before** turning on Reminders sync or clicking Connect for an AI client. Those write to real Reminders and to `~/.claude.json`.
 
 ## Tracking work
 
 Issues are at [pitis/perch](https://github.com/pitis/perch/issues), with the pinned [#1](https://github.com/pitis/perch/issues/1) as the feature checklist. Label `verify` means built but not yet run for real, and `gap` means not built. `product.md` lists the same status feature by feature. Keep both accurate, and only mark something done after running it for real rather than because the code compiles or the logic tests pass.
+
+## Ticket flow
+
+An issue named or linked in chat **is the instruction to run this whole flow, end to end, without asking whether to start.** Stop and ask only for product decisions the issue doesn't answer, never for mechanics.
+
+1. Read the issue fully. Check for an existing PR and branch (`gh pr list --state all`, `git branch -a`).
+2. Work in **a worktree**, never by switching branches in the main checkout (other sessions share it, so keep it on `main`). New work: `make worktree name=<slug> branch=<type>/<slug>` (`feat/`, `fix/`, `chore/`, `perf/`), named right from the start, because a PR's branch can't be renamed. Add `base=origin/<branch>` to stack on an open PR. For an existing branch, use its worktree and run **`make update` before writing code**.
+3. Implement test-first where the logic lives in `PerchCore`. A test proves a fix only if it failed before the fix.
+4. Verify with `make check`. A change to anything on screen also gets `make shots out=<folder outside the repo>`: look at the screens it touches, before and after. Anything that needs the running app follows *Testing on the real Mac*.
+5. Push with `git push -u origin HEAD` (new branches don't track anything yet) and open the PR with `gh pr create`. Title: the effect, in a plain sentence. Body: what changed, why, how it was tested, and the issue. Write `Closes #<n>` only if the change was run for real; otherwise `Refs #<n>`, and after the merge a `gap` issue becomes `verify` (see *Tracking work*).
+6. **Every PR that changes what's on screen carries before/after screenshots**, from `make shots`, of only the screens it touches. Write `body.md` in the shots folder as a `| Before | After |` table with one row per screen (`| ![Before](./before-workspace.png) | ![After](./after-workspace.png) |`), then `gh pr comment <n> --body-file <folder>/body.md --attach <folder>/before-workspace.png --attach <folder>/after-workspace.png …`. `gh` uploads each file and rewrites its reference.
+7. **Right after opening the PR, without being asked,** run `/pr-review-toolkit:review-pr` and `/ponytail:ponytail-review` on the PR's own diff (`git diff origin/main...HEAD`; a stacked PR's base is its parent branch). There are no other reviewers, so these are the review. Fix every Critical and Important finding on the same branch without waiting, re-run the checks (and the shots, if the screens changed again), push, and post one PR comment listing each finding and its fix. Declining a finding is a stated ruling, not silence. A finding that needs a product decision stays unfixed and goes to the user. Then report the same in chat. The PR is ready for the user only after this step.
+8. **Merge only on the user's go,** from the main checkout: check `git status` in the worktree, `git worktree remove worktrees/<n>--<slug>`, then `gh pr merge <n> --squash --delete-branch`. A branch that's still checked out in a worktree can't be deleted.
+
+## Worktrees
+
+- `make worktree` creates `worktrees/<PR number>--<slug>` inside the main checkout (gitignored). The number is the branch's PR if it has one. Otherwise it's one more than the highest issue, PR or local worktree number. That's a guess, and the folder keeps it even if the PR gets another number. A new branch starts from the latest `origin/main`, or from `base=origin/<branch>`. An existing branch is checked out as it is. Each worktree has its own `.build`, so its first build is a full one. It also fast-forwards the main checkout's `main`, because sessions started there read its `AGENTS.md`.
+- `make update` merges `origin/main` into the branch, or the stacked base until that base's PR is merged or its branch is deleted. From then on it follows `main`. When the base was squash-merged, it first records the squash as already merged, so the base's changes arriving again from `main` don't conflict. On a conflict it makes no merge, and prints the conflicted files and the `git merge` to run.
+- A closed PR's worktree goes the same way as a merged one: check `git status` there, then `git worktree remove worktrees/<n>--<slug>` and `git branch -D <branch>`.
+
+## Git
+
+- **Never `--no-verify`.** There's no CI: `.githooks/` (enabled by `make setup`) and `make check` before every push are the whole gate. Fix the cause or stop and ask. Hooks only run on branches that contain `.githooks/`, and `make update` brings it to older ones.
+- **Never force-push or rebase a pushed branch.** Catch up with `make update`. The same goes for `commit --amend` and `reset --hard` on pushed commits.
+- One issue = one PR, and review fixes go on the same branch. Squash-merge only. No `#NNN` in commit messages, only in PR bodies.
+- No AI attribution anywhere: commits, PR bodies and comments (no `Co-Authored-By`, no "Generated with"). The hooks only catch Claude's co-author trailer and "generated with" line, in commit messages and staged lines. The rest is up to you.
+- PR screenshots and test evidence stay out of the repo. Only the README's images live in `docs/images/`.

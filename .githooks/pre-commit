@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# No AI attribution in the repo. The full gate is `make check`; run it before every push.
+# The diff goes through a variable rather than a pipe into `grep -q`: an early grep exit would
+# SIGPIPE `git diff` and, under pipefail, read as "no match". [[:space:]] keeps the pattern below
+# from matching its own text when this file (or commit-msg) is committed.
+set -euo pipefail
+diff=$(git diff --cached --no-color --no-ext-diff)
+if grep -qiE '^\+.*(co-authored-by:[[:space:]]*claude|generated with[[:space:]]+\[?claude|noreply@anthropic\.com)' <<<"$diff"; then
+  echo "✗ no AI attribution in the repo" >&2; exit 1
+fi
