@@ -64,3 +64,19 @@ public struct Store {
         try encoded.write(to: url, options: .atomic)
     }
 }
+
+/// Folders macOS guards with a permission prompt: Desktop, Documents, Downloads, and removable and network volumes.
+/// Touching anything inside one before the user has answered blocks until they do.
+public enum ProtectedFolders {
+    public static let all = [FileManager.SearchPathDirectory.desktopDirectory, .documentDirectory, .downloadsDirectory]
+        .map { FileManager.default.urls(for: $0, in: .userDomainMask)[0] } + [URL(fileURLWithPath: "/Volumes")]
+
+    /// Whether touching `path` could raise that prompt. `granted` is a folder Perch already reads, such as the
+    /// screenshot folder it watches, and covers the whole protected folder it's in.
+    public static func mayPrompt(_ path: String, granted: URL?, protected: [URL] = all) -> Bool {
+        func inside(_ path: String, _ folder: URL) -> Bool { path == folder.path || path.hasPrefix(folder.path + "/") }
+        return protected.contains { folder in
+            inside(path, folder) && !(granted.map { inside($0.path, folder) } ?? false)
+        }
+    }
+}

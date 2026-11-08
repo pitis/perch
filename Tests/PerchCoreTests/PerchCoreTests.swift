@@ -583,3 +583,38 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(w.task(t.id), before, "a bad field leaves the task untouched")
     }
 }
+
+final class ProtectedFoldersTests: XCTestCase {
+    private let folders = ["/Users/me/Desktop", "/Users/me/Documents", "/Volumes"].map { URL(fileURLWithPath: $0) }
+
+    private func mayPrompt(_ path: String, granted: String? = nil) -> Bool {
+        ProtectedFolders.mayPrompt(path, granted: granted.map { URL(fileURLWithPath: $0) }, protected: folders)
+    }
+
+    func testFilesInsideProtectedFoldersMayPrompt() {
+        XCTAssertTrue(mayPrompt("/Users/me/Documents/report.pdf"))
+        XCTAssertTrue(mayPrompt("/Users/me/Desktop/a/b.png"))
+        XCTAssertTrue(mayPrompt("/Volumes/USB/photo.jpg"))
+    }
+
+    func testOtherFilesDoNot() {
+        XCTAssertFalse(mayPrompt("/Users/me/Pictures/cat.png"))
+        XCTAssertFalse(mayPrompt("/Users/me/Documents Old/notes.txt"), "a sibling with the same prefix isn't inside")
+        XCTAssertFalse(mayPrompt("/Users/me/Library/Application Support/Perch/Clips/x.png"))
+    }
+
+    func testAGrantedFolderCoversItsWholeProtectedFolder() {
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Desktop"))
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Desktop/Screenshots"))
+        XCTAssertTrue(mayPrompt("/Users/me/Documents/report.pdf", granted: "/Users/me/Desktop"))
+        XCTAssertTrue(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Pictures"))
+    }
+
+    func testDefaultsAreTheUsersFolders() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        for name in ["Desktop", "Documents", "Downloads"] {
+            XCTAssertTrue(ProtectedFolders.mayPrompt("\(home)/\(name)/file", granted: nil), name)
+        }
+        XCTAssertFalse(ProtectedFolders.mayPrompt("\(home)/Pictures/file", granted: nil))
+    }
+}

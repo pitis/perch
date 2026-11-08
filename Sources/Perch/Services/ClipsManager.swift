@@ -60,7 +60,8 @@ final class ClipsManager {
 
     private func load() {
         guard let raw = try? Data(contentsOf: indexFile), let saved = try? Store.decoder.decode([Clip].self, from: raw) else { return }
-        clips = saved.filter { $0.url.map { FileManager.default.fileExists(atPath: $0.path) } ?? true }
+        clips = saved
+        pruneMissing()
     }
 
     func save() {
@@ -98,12 +99,19 @@ final class ClipsManager {
         saveSoon()
     }
 
-    /// Clears out clips whose files were deleted or moved since they were added.
+    /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
+    /// protected folder Perch hasn't been granted are never checked, because that could raise a macOS prompt.
+    /// Their clips stay, and opening or dragging one whose file is gone does nothing.
     func pruneMissing() {
-        let alive = clips.filter { $0.url.map { FileManager.default.fileExists(atPath: $0.path) } ?? true }
-        if alive.count != clips.count {
-            clips = alive
-            saveSoon()
+        let paths = clips.compactMap(\.path).filter { !ProtectedFolders.mayPrompt($0, granted: watchedFolder) }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let missing = Set(paths.filter { !FileManager.default.fileExists(atPath: $0) })
+            guard !missing.isEmpty else { return }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.clips.removeAll { $0.path.map(missing.contains) ?? false }
+                self.saveSoon()
+            }
         }
     }
 
@@ -155,6 +163,7 @@ final class ClipsManager {
     func updateScreenshotWatcher() {
         watcher?.cancel()
         watcher = nil
+        watchedFolder = nil
         guard workspace?.data.settings.captureScreenshots == true else { return }
 
         // The first touch of the Desktop folder shows a macOS permission prompt and blocks until it's answered,
@@ -280,7 +289,8 @@ final class ClipsManager {
     }
 
     func dragProvider(for clip: Clip) -> NSItemProvider {
-        if let url = clip.url, let provider = NSItemProvider(contentsOf: url) { return provider }
+        // A file clip that can't be dragged as a file drags nothing, rather than an empty piece of text.
+        if let url = clip.url { return NSItemProvider(contentsOf: url) ?? NSItemProvider() }
         return NSItemProvider(object: (clip.text ?? "") as NSString)
     }
 }

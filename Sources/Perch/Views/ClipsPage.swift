@@ -154,9 +154,12 @@ private struct ClipCard: View {
 
     private func loadThumbnail() async {
         guard thumbnail == nil, let url = clip.url else { return }
-        let request = QLThumbnailGenerator.Request(fileAt: url, size: Self.size, scale: 2, representationTypes: .all)
-        if let result = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
-            thumbnail = result.nsImage
-        }
+        // Off the main thread: reading a file in a protected folder can block on a macOS prompt.
+        let size = Self.size
+        let image = await Task.detached {
+            let request = QLThumbnailGenerator.Request(fileAt: url, size: size, scale: 2, representationTypes: .all)
+            return try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).nsImage
+        }.value
+        if let image { thumbnail = image }
     }
 }
