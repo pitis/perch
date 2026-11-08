@@ -1,6 +1,6 @@
 # Perch: what's done and what isn't
 
-Last updated: 7 November 2026
+Last updated: 8 November 2026
 
 The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) and [changelog](https://www.notchowl.com/changelog).
 
@@ -35,6 +35,7 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Files marked as screenshots are picked up and ordinary images are ignored (tested with simulated files)
 
 **App**
+- App icon, in Finder and the menu bar and on the panel
 - Data survives a relaunch
 - Idle use is about 0% CPU and 32 MB of memory
 
@@ -130,7 +131,6 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 ## Not done: not built yet
 
 - First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
-- App icon ([#14](https://github.com/pitis/perch/issues/14))
 - Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Resizing cards by dragging ([#16](https://github.com/pitis/perch/issues/16))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))

@@ -5,7 +5,7 @@ import SwiftUI
 /// `Perch --snapshot <folder>` renders each screen to a PNG using sample data and writes nothing else to disk.
 /// It's how the UI gets looked at without Screen Recording permission.
 enum Snapshot {
-    static func run(to folder: String) {
+    @MainActor static func run(to folder: String) {
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
 
         for bw in [false, true] {
@@ -38,6 +38,17 @@ enum Snapshot {
         render(hub, name: "compact-greeting", folder: folder, size: CGSize(width: 480, height: 50))
 
         renderView(SettingsView().environment(hub), name: "settings", folder: folder, size: CGSize(width: 560, height: 1100))
+        renderView(Image(nsImage: PerchedBird.menuBarImage).renderingMode(.template).foregroundStyle(.white)
+                       .frame(width: 60, height: 24).background(.black),
+                   name: "menubar", folder: folder, size: CGSize(width: 60, height: 24))
+
+        // Exactly 1024 pixels whatever the screen's scale, for `make icon`.
+        let icon = ImageRenderer(content: AppIconArt())
+        icon.scale = 1
+        if let image = icon.cgImage {
+            let file = URL(fileURLWithPath: folder).appendingPathComponent("app-icon.png")
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: file)
+        }
     }
 
     private static func render(_ hub: AppHub, name: String, folder: String, size: CGSize = CGSize(width: 924, height: 440)) {

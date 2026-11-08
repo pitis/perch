@@ -155,10 +155,7 @@ struct ActivityCard: View {
         if let task = hub.ui.activity {
             HStack(spacing: 12) {
                 ZStack(alignment: .bottomTrailing) {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(LinearGradient(colors: [Color(hex: 0xF3C9A0), Color(hex: 0xE9973F)], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 60, height: 60)
-                        .overlay(Image(systemName: "bird.fill").font(.system(size: 28)).foregroundStyle(Color(hex: 0x3B2E5A)))
+                    AppBadge(side: 60)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     Image(systemName: "bell.fill")
                         .font(.system(size: 10)).foregroundStyle(.white)
@@ -208,10 +205,7 @@ struct PageHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(hex: 0xF3C9A0), Color(hex: 0xE9973F)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 22, height: 22)
-                    .overlay(Image(systemName: "bird.fill").font(.system(size: 11)).foregroundStyle(Color(hex: 0x3B2E5A)))
+                AppBadge(side: 22)
                 Text("Perch").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                 Button { page = .clips } label: {
                     Label("Clips", systemImage: "paperclip")
