@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "bird.fill", accessibilityDescription: "Perch")
+        statusItem.button?.image = PerchedBird.menuBarImage
         let menu = NSMenu()
         menu.addItem(item("Open Workspace", #selector(openWorkspace), key: ""))
         menu.addItem(item("Open Dashboard", #selector(openDashboard), key: "d"))

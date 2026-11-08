@@ -1,3 +1,5 @@
+<img src="docs/images/icon.png" width="128" alt="Perch's icon: a small bird sitting on a branch, on an orange square">
+
 # Perch
 
 Tasks, notes, focus timers, calendar events and recent clips, in your Mac's notch. Hover over the notch and it opens, and it closes when you move away. Option-N opens it from the keyboard, and then it stays until you press Option-N or Esc, or click elsewhere.

@@ -10,6 +10,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$(swift build -c release --show-bin-path)/Perch" "$APP/Contents/MacOS/Perch"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+mkdir -p "$APP/Contents/Resources"
+cp scripts/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # A stable signature keeps macOS permissions across rebuilds. Ad-hoc signing would re-prompt every time.
 IDENTITY=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Apple Development[^"]*\)".*/\1/p' | head -1)
