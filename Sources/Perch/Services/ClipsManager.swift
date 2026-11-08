@@ -157,16 +157,28 @@ final class ClipsManager {
         watcher = nil
         guard workspace?.data.settings.captureScreenshots == true else { return }
 
-        let folder = Self.screenshotFolder
-        let fd = Darwin.open(folder.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        watchedFolder = folder
-        knownNames = names(in: folder)
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
-        source.setEventHandler { [weak self] in self?.scheduleScan() }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        watcher = source
+        // The first touch of the Desktop folder shows a macOS permission prompt and blocks until it's answered,
+        // which would freeze the whole app if it happened on the main thread.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let folder = Self.screenshotFolder
+            let fd = Darwin.open(folder.path, O_EVTONLY)
+            guard fd >= 0 else { return }
+            let existing = Set((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
+            DispatchQueue.main.async {
+                guard let self, self.workspace?.data.settings.captureScreenshots == true else {
+                    close(fd)
+                    return
+                }
+                self.watcher?.cancel()
+                self.watchedFolder = folder
+                self.knownNames = existing
+                let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+                source.setEventHandler { [weak self] in self?.scheduleScan() }
+                source.setCancelHandler { close(fd) }
+                source.resume()
+                self.watcher = source
+            }
+        }
     }
 
     private static var screenshotFolder: URL {

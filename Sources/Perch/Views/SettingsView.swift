@@ -88,7 +88,7 @@ struct SettingsView: View {
                         hub.clips.updateScreenshotWatcher()
                     }
                 ))
-                Text("Items that password managers mark as private are never kept.").font(.caption).foregroundStyle(.secondary)
+                Text("Items that password managers mark as private are never kept. Turning on screenshots makes macOS ask once for access to your Desktop folder.").font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
