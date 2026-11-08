@@ -1,4 +1,4 @@
-.PHONY: setup check shots icon worktree update
+.PHONY: setup check shots icon dmg worktree update
 
 setup: ## One-time: enable the git hooks in .githooks/
 	git config core.hooksPath .githooks
@@ -12,6 +12,9 @@ shots: ## Before/after PNGs of every screen: make shots out=<dir outside the rep
 
 icon: ## Rebuild scripts/AppIcon.icns and docs/images/icon.png from the bird in Sources/Perch/Views/AppMark.swift
 	scripts/icon.sh
+
+dmg: ## Build dist/Perch-<version>.dmg for a release, from a clean checkout
+	scripts/dmg.sh
 
 worktree: ## New worktree: make worktree name=<slug> branch=<type/slug> [base=origin/<stacked-on>]
 	@test -n "$(name)" -a -n "$(branch)" || { echo "usage: make worktree name=<slug> branch=<type/slug> [base=origin/<branch>]"; exit 2; }

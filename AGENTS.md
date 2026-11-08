@@ -1,6 +1,6 @@
 # Perch
 
-A personal macOS app that lives in the notch: tasks, notes, focus timers, calendar events and clips. Swift 6 toolchain in Swift 5 language mode, SwiftUI inside an AppKit panel, macOS 14+ on Apple silicon. There's one user, and it's built from source.
+A personal macOS app that lives in the notch: tasks, notes, focus timers, calendar events and clips. Swift 6 toolchain in Swift 5 language mode, SwiftUI inside an AppKit panel, macOS 14+ on Apple silicon. It's built from source or installed from a release DMG.
 
 ## Commands
 
@@ -15,6 +15,7 @@ make worktree name=<slug> branch=<type>/<slug>  # see Worktrees
 make update                                 # merge the latest base into this branch
 make setup                                  # once per clone: enables .githooks/
 make icon                                   # rebuilds scripts/AppIcon.icns after the bird changes
+make dmg                                    # dist/Perch-<version>.dmg, from a clean checkout (see Releasing)
 ```
 
 `--snapshot` is how to look at UI changes: shells here have no Screen Recording permission, so `screencapture` fails.
@@ -43,7 +44,7 @@ make icon                                   # rebuilds scripts/AppIcon.icns afte
 - **Spec:** feature parity with NotchOwl, using only its public site and [changelog](https://www.notchowl.com/changelog). Never download or inspect its app, and never use its name, logo or assets.
 - **Left out on purpose:** licensing and activation, the update button, usage analytics, the bug report button.
 - **Reminders sync:** the most recent edit wins. Each repeat occurrence is its own reminder with no recurrence rule. Deadlines travel as a `Deadline: yyyy-MM-dd` last line in the notes. Many items vanishing at once unlinks tasks rather than deleting them.
-- **Signing:** the Apple Development certificate, because a stable signature keeps macOS permissions across rebuilds. No hardened runtime.
+- **Signing:** the Apple Development certificate, because a stable signature keeps macOS permissions across rebuilds. No hardened runtime. Releases are signed the same way and not notarized, which needs a paid Developer ID, so a downloaded copy opens the first time through Open Anyway.
 
 ## Testing on the real Mac
 
@@ -86,3 +87,11 @@ An issue named or linked in chat **is the instruction to run this whole flow, en
 - One issue = one PR, and review fixes go on the same branch. Squash-merge only. No `#NNN` in commit messages, only in PR bodies.
 - No AI attribution anywhere: commits, PR bodies and comments (no `Co-Authored-By`, no "Generated with"). The hooks only catch Claude's co-author trailer and "generated with" line, in commit messages and staged lines. The rest is up to you.
 - PR screenshots and test evidence stay out of the repo. Only the README's images live in `docs/images/`.
+
+## Releasing
+
+Only on the user's go.
+
+1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in `scripts/Info.plist` in a PR.
+2. Once it's merged, in the main checkout on an up-to-date `main`: `make dmg`. It refuses uncommitted changes, so the DMG matches a commit.
+3. `git tag v<version> && git push origin v<version>`, then `gh release create v<version> dist/Perch-<version>.dmg --prerelease --title "Perch <version>" --notes-file <notes>`. The notes say what changed, what's confirmed working (`product.md`), and how to get past the not-notarized warning.

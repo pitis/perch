@@ -140,10 +140,10 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 
 ## Left out on purpose
 
-Perch is a personal app built from source, so these aren't planned:
+These aren't planned:
 
 - Licensing and activation
-- Notarization and DMG distribution
+- Notarization, which needs a paid Developer ID. Release DMGs open the first time through Open Anyway.
 - Update button and update checks
 - Usage analytics
 - Bug report button
