@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# No AI attribution in commit messages. [[:space:]] keeps this file from matching itself.
+# No AI attribution in commit messages. The message goes through a variable rather than a pipe into
+# `grep -q`: with `git commit -v` the file holds the whole diff, and an early grep exit would SIGPIPE
+# stripspace and, under pipefail, read as "no match".
 set -euo pipefail
-if git stripspace --strip-comments <"$1" | grep -qiE 'co-authored-by:[[:space:]]*claude|generated with[[:space:]]+\[?claude'; then
+msg=$(git stripspace --strip-comments <"$1")
+if grep -qiE 'co-authored-by:[[:space:]]*claude|generated with[[:space:]]+\[?claude|noreply@anthropic\.com' <<<"$msg"; then
   echo "✗ no AI attribution in commit messages" >&2; exit 1
 fi
