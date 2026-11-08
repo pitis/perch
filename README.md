@@ -36,15 +36,15 @@ Perch is young. Everything above is built, but much of it hasn't been tried in t
 
 ## Install
 
-You need macOS 14 or later on Apple silicon. Download `Perch-0.1.dmg` from [Releases](https://github.com/pitis/perch/releases), open it and drag Perch to Applications.
+You need macOS 14 or later on Apple silicon. Download the latest `.dmg` from [Releases](https://github.com/pitis/perch/releases), open it, drag Perch to Applications and eject the disk image. Always run Perch from Applications: a copy opened from the disk image stops working once it's ejected.
 
 Perch isn't notarized by Apple, which needs a paid developer account, so macOS refuses to open it the first time:
 
-1. Open Perch, and click Done on the warning.
-2. In System Settings › Privacy & Security, scroll down to Security and click Open Anyway next to Perch.
-3. Confirm with your password or Touch ID. From then on it opens normally.
+1. Open Perch from Applications. macOS says it can't verify it: click Done (Cancel on macOS 14).
+2. Within the hour, open System Settings › Privacy & Security, scroll down to Security and click Open Anyway next to Perch.
+3. Click Open Anyway again if asked, and confirm with your password or Touch ID. From then on it opens normally.
 
-On macOS 14 you can instead right-click Perch in Applications and choose Open.
+On macOS 14 you can instead right-click Perch in Applications, choose Open, then click Open in the dialog.
 
 It has no Dock icon: it lives in the notch and the menu bar. It also takes over Option-N, so on a US keyboard that shortcut no longer types ñ.
 
