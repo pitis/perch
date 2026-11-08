@@ -86,10 +86,11 @@ enum Snapshot {
 
         // Seven days of history so Insights has something to show.
         let counts = [(4, 5), (6, 7), (2, 4), (7, 8), (3, 3), (5, 6)]
+        let titles = ["Answer email", "Review the PR", "Grocery run", "Draft the blog post", "Fix the login bug", "Call the bank", "Stretch", "Plan the sprint"]
         for (offset, count) in counts.enumerated() {
             let day = Day.adding(offset - 6, to: today, calendar: cal)
             for i in 0..<count.1 {
-                let task = ws.add("Task \(i + 1) on \(day)", defaultDay: day)!
+                let task = ws.add(titles[(offset + i) % titles.count], defaultDay: day)!
                 if i < count.0 {
                     ws.update(task.id) { $0.completedAt = Day.at(day, hour: 10 + i, minute: 0, calendar: cal) }
                 } else {
