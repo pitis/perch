@@ -11,8 +11,8 @@ private var utc: Calendar = {
 /// Saturday 7 Nov 2026, 10:00 local.
 private let saturday = Day.at("2026-11-07", hour: 10, minute: 0, calendar: utc)
 
-private func parse(_ text: String, at now: Date = saturday) -> ParsedTask {
-    NLParser.parse(text, now: now, calendar: utc)
+private func parse(_ text: String, at now: Date = saturday, locale: String = "en_US") -> ParsedTask {
+    NLParser.parse(text, now: now, calendar: utc, locale: Locale(identifier: locale))
 }
 
 private func clock(_ date: Date?) -> String {
@@ -89,6 +89,24 @@ final class NLParserTests: XCTestCase {
         XCTAssertEqual(parse("pay rent by friday").title, "Pay rent")
         XCTAssertNil(parse("pay rent by friday").day)
         XCTAssertEqual(parse("Plan trip p2").priority, .medium)
+    }
+
+    func testNumericDatesFollowTheLocalesOrder() {
+        XCTAssertEqual(parse("x 12/25").day, "2026-12-25")
+        XCTAssertEqual(parse("x 12/25").title, "X")
+        XCTAssertEqual(parse("x 3/4").day, "2027-03-04", "already past this year")
+        XCTAssertEqual(parse("x 12/25/27").day, "2027-12-25")
+        XCTAssertEqual(parse("x 25/12", locale: "en_GB").day, "2026-12-25")
+        XCTAssertEqual(parse("x 3/4", locale: "en_GB").day, "2027-04-03")
+        XCTAssertEqual(parse("x 25.12.2026", locale: "ro_RO").day, "2026-12-25")
+        XCTAssertEqual(parse("x 25.12.", locale: "de_DE").title, "X")
+        XCTAssertEqual(parse("x 25/12 at 9:30", locale: "ro_RO").reminderAt.map(clock), "2026-12-25 09:30")
+        XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").deadline, "2026-11-30")
+        XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").title, "Pay rent")
+        for (text, locale) in [("x 25/12", "en_US"), ("x 12.25", "en_US"), ("pay 10.50 to bob", "ro_RO"), ("update to 1.2.3", "de_DE"), ("room 12/40", "en_US")] {
+            XCTAssertNil(parse(text, locale: locale).day, text)
+            XCTAssertEqual(parse(text, locale: locale).title.lowercased(), text.lowercased(), text)
+        }
     }
 
     func testAllDetailsAndNoTitleKeepsSomethingToShow() {

@@ -213,13 +213,21 @@ final class ClipsManager {
         }
     }
 
+    /// What macOS calls a new recording ("Bildschirmaufnahme", "Înregistrare ecran"), since recordings often lack the attribute.
+    /// Read from the screenshot tool's own strings, in the language it picks from the user's list; English stays as a fallback.
+    private static let recordingNames: [String] = {
+        let url = URL(fileURLWithPath: "/System/Library/CoreServices/screencaptureui.app/Contents/Resources/Localizable.loctable")
+        let table = NSDictionary(contentsOf: url) as? [String: Any] ?? [:]
+        let languages = Bundle.preferredLocalizations(from: Array(table.keys), forPreferences: Locale.preferredLanguages)
+        return ["Screen Recording"] + languages.compactMap { (table[$0] as? [String: Any])?["Screen Recording"] as? String }
+    }()
+
     static func captureKind(of url: URL) -> Clip.Kind? {
         let ext = url.pathExtension.lowercased()
         // macOS marks screenshots with this attribute in every language, which beats matching file names.
         let marked = getxattr(url.path, "com.apple.metadata:kMDItemIsScreenCapture", nil, 0, 0, 0) > 0
         if ["mov", "mp4"].contains(ext) {
-            // shortcut: recordings are matched by their default English name when the attribute is missing.
-            return marked || url.lastPathComponent.hasPrefix("Screen Recording") ? .recording : nil
+            return marked || recordingNames.contains(where: url.lastPathComponent.hasPrefix) ? .recording : nil
         }
         if ["png", "jpg", "jpeg", "heic", "tiff", "pdf"].contains(ext) {
             return marked ? .screenshot : nil

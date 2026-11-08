@@ -52,6 +52,7 @@ private struct Cutter {
 }
 
 /// English task phrases: "call mom tomorrow at 5pm", "standup every weekday at 9:30 !high #work", "invoice by friday".
+/// Numeric dates such as "12/25" are read in the order of the locale's short date format.
 public enum NLParser {
     private static let fullDays = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
     private static let shortDays = ["sun": 1, "mon": 2, "tue": 3, "tues": 3, "wed": 4, "thu": 5, "thur": 5, "thurs": 5, "fri": 6, "sat": 7]
@@ -69,22 +70,24 @@ public enum NLParser {
     private static let shortDayAlt = "tues|tue|sun|mon|wed|thurs|thur|thu|fri|sat"
     private static let monthAlt = "january|february|march|april|may|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec"
     private static let ordinal = "(?:st|nd|rd|th)?"
-    private static var dayExpr: String {
+    private static func dayExpr(_ numeric: NumericDate) -> String {
         "today|tomorrow|tmrw|next week|next month|(?:next |this )?(?:\(fullDayAlt)|\(shortDayAlt))"
-            + "|(?:\(monthAlt))\\.? \\d{1,2}\(ordinal)|\\d{1,2}\(ordinal) (?:of )?(?:\(monthAlt))"
+            + "|(?:\(monthAlt))\\.? \\d{1,2}\(ordinal)|\\d{1,2}\(ordinal) (?:of )?(?:\(monthAlt))|\(numeric.pattern)"
     }
 
-    public static func parse(_ input: String, now: Date = Date(), calendar: Calendar = .current) -> ParsedTask {
+    /// `locale` decides whether "3/4" is March 4 or April 3; `.current` follows the Mac's date format setting.
+    public static func parse(_ input: String, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> ParsedTask {
         var s = Cutter(text: normalized(input))
         var result = ParsedTask()
         let today = Day.key(now, calendar: calendar)
+        let numeric = NumericDate(locale: locale)
 
         result.priority = takePriority(&s)
         result.project = takeProject(&s)
         result.repeatRule = takeRepeat(&s)
 
-        if let m = s.take("\\b(?:due(?: on| by)?|by|deadline)\\s+(\(dayExpr))\\b"), let expr = m[1] {
-            result.deadline = dayKey(from: expr, today: today, calendar: calendar)
+        if let m = s.take("\\b(?:due(?: on| by)?|by|deadline)\\s+(\(dayExpr(numeric)))\\b"), let expr = m[1] {
+            result.deadline = dayKey(from: expr, today: today, numeric: numeric, calendar: calendar)
         }
 
         var relative: Date?
@@ -118,7 +121,7 @@ public enum NLParser {
             explicitDay = today
         }
 
-        if let day = takeDay(&s, today: today, calendar: calendar) { explicitDay = day }
+        if let day = takeDay(&s, today: today, numeric: numeric, calendar: calendar) { explicitDay = day }
 
         let firstRepeat = result.repeatRule?.first(onOrAfter: today, calendar: calendar)
 
@@ -150,6 +153,26 @@ public enum NLParser {
         result.title = cleanTitle(s.text)
         if result.title.isEmpty { result.title = cleanTitle(input) }
         return result
+    }
+
+    /// "12/25", "25.12.", "25/12/2026": day and month in the locale's order, its separator or a slash, an optional year.
+    private struct NumericDate {
+        var pattern: String
+        var dayFirst: Bool
+
+        init(locale: Locale) {
+            let f = DateFormatter()
+            f.locale = locale
+            f.dateStyle = .short
+            let format = f.dateFormat ?? "M/d/y"
+            dayFirst = (format.firstIndex(of: "d") ?? format.endIndex) < (format.firstIndex(of: "M") ?? format.endIndex)
+            let own = format.first { !$0.isLetter && !$0.isWhitespace && $0 != "'" } ?? "/"
+            let sep = "[\\/\\\(own)]"
+            let day = "(0?[1-9]|[12]\\d|3[01])", month = "(0?[1-9]|1[0-2])"
+            // The lookarounds keep version numbers ("1.2.3") and prices ("10.50") out.
+            pattern = "(?<![\\w./-])" + (dayFirst ? day + sep + month : month + sep + day)
+                + "(?:\(sep)(\\d{4}|\\d{2})|\(sep)?)(?![\\w]|[./-]\\d)"
+        }
     }
 
     private struct Clock {
@@ -264,7 +287,7 @@ public enum NLParser {
         }
     }
 
-    private static func takeDay(_ s: inout Cutter, today: String, calendar: Calendar) -> String? {
+    private static func takeDay(_ s: inout Cutter, today: String, numeric: NumericDate, calendar: Calendar) -> String? {
         if s.take("\\b(?:the )?day after tomorrow\\b") != nil { return Day.adding(2, to: today, calendar: calendar) }
         if s.take("\\b(?:tomorrow|tmrw)\\b") != nil { return Day.adding(1, to: today, calendar: calendar) }
         if s.take("\\btoday\\b") != nil { return today }
@@ -283,6 +306,13 @@ public enum NLParser {
             let date = Int(m[2] ?? m[3] ?? "") ?? 1
             return monthDay(month, date, year: m[5].flatMap { Int($0) }, today: today, calendar: calendar)
         }
+        if let m = s.take(numeric.pattern) {
+            let first = Int(m[1] ?? "") ?? 1, second = Int(m[2] ?? "") ?? 1
+            let year = m[3].flatMap { Int($0) }.map { $0 < 100 ? 2000 + $0 : $0 }
+            return numeric.dayFirst
+                ? monthDay(second, first, year: year, today: today, calendar: calendar)
+                : monthDay(first, second, year: year, today: today, calendar: calendar)
+        }
         if let m = s.take("\\bnext (week|month)\\b") {
             if m[1]?.lowercased() == "month" {
                 return Day.key(calendar.date(byAdding: .month, value: 1, to: Day.date(today, calendar: calendar))!, calendar: calendar)
@@ -297,9 +327,9 @@ public enum NLParser {
         return nil
     }
 
-    private static func dayKey(from expr: String, today: String, calendar: Calendar) -> String? {
+    private static func dayKey(from expr: String, today: String, numeric: NumericDate, calendar: Calendar) -> String? {
         var s = Cutter(text: expr)
-        return takeDay(&s, today: today, calendar: calendar) ?? {
+        return takeDay(&s, today: today, numeric: numeric, calendar: calendar) ?? {
             // takeDay leaves bare short names alone so "sat with mom" stays a title; after "by" they're unambiguous.
             let lower = expr.lowercased()
             return shortDays[lower].map { upcoming(weekday: $0, next: false, from: today, calendar: calendar) }
