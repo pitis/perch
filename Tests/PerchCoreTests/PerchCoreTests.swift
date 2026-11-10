@@ -583,3 +583,36 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(w.task(t.id), before, "a bad field leaves the task untouched")
     }
 }
+
+final class CardLayoutTests: XCTestCase {
+    func testWidthsFollowWeights() {
+        XCTAssertEqual(CardLayout.widths([2, 1, 1], minimums: [0, 0, 0], in: 400), [200, 100, 100])
+    }
+
+    func testWidthsNeverGoBelowAMinimum() {
+        let widths = CardLayout.widths([0.1, 1, 1], minimums: [150, 0, 0], in: 450)
+        XCTAssertEqual(widths, [150, 150, 150])
+    }
+
+    func testResizeTradesWidthBetweenTheTwoNeighboursOnly() {
+        let weights = CardLayout.resize([2, 1, 1], at: 0, by: -100, minimums: [0, 0, 0], in: 400)
+        XCTAssertEqual(weights, [1, 2, 1])
+    }
+
+    func testResizeStopsAtEitherNeighboursMinimum() {
+        let left = CardLayout.resize([1, 1], at: 0, by: -500, minimums: [150, 150], in: 400)
+        XCTAssertEqual(CardLayout.widths(left, minimums: [150, 150], in: 400), [150, 250])
+        let right = CardLayout.resize([1, 1], at: 0, by: 500, minimums: [150, 150], in: 400)
+        XCTAssertEqual(CardLayout.widths(right, minimums: [150, 150], in: 400), [250, 150])
+    }
+
+    func testCustomWidthPersistsAndOlderPresetsStillLoad() throws {
+        var card = CardConfig(kind: .notes)
+        card.weight = 1.37
+        let back = try JSONDecoder().decode(CardConfig.self, from: JSONEncoder().encode(card))
+        XCTAssertEqual(back.weight, 1.37)
+        let old = try JSONDecoder().decode(CardConfig.self, from: Data(#"{"kind":"tasks","visible":false,"width":"wide"}"#.utf8))
+        XCTAssertEqual(old.weight, CardConfig.Width.wide.weight)
+        XCTAssertFalse(old.visible)
+    }
+}

@@ -102,6 +102,9 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Dragging a file onto the notch
 - Removing clips and Clear all
 
+**Resizing cards by dragging the gap between them** ([#16](https://github.com/pitis/perch/issues/16))
+- Widths saved as a number, and each card stops at a minimum width (unit-tested, seen with sample data)
+
 **Calendar** ([#8](https://github.com/pitis/perch/issues/8))
 - Connect, today's events and Refresh, only seen with sample data so far
 - Ticking off events locally
@@ -132,7 +135,6 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 
 - First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
 - Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
-- Resizing cards by dragging ([#16](https://github.com/pitis/perch/issues/16))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
 - Languages other than English, numeric dates such as 12/25, and detecting recordings without their English file name ([#18](https://github.com/pitis/perch/issues/18))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))

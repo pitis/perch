@@ -5,25 +5,58 @@ import UniformTypeIdentifiers
 
 struct WorkspacePage: View {
     @Environment(AppHub.self) private var hub
+    /// Weights while a gap is being dragged, saved once the drag ends so the store isn't rewritten every frame.
+    @State private var dragging: (start: [Double], live: [Double])?
+    private let gap: CGFloat = 8
 
     var body: some View {
         let cards = hub.workspace.data.settings.cards.filter(\.visible)
         GeometryReader { geometry in
-            let gap: CGFloat = 8
-            let total = cards.reduce(0.0) { $0 + $1.width.weight }
-            let unit = (geometry.size.width - gap * CGFloat(max(0, cards.count - 1))) / max(total, 0.01)
+            let available = geometry.size.width - gap * CGFloat(max(0, cards.count - 1))
+            let minimums = cards.map(\.kind.minWidth)
+            let widths = CardLayout.widths(dragging?.live ?? cards.map(\.weight), minimums: minimums, in: available)
             if cards.isEmpty {
                 ContentUnavailableView("All cards are hidden", systemImage: "eye.slash", description: Text("Turn them back on in Customize."))
                     .foregroundStyle(.white.opacity(0.7))
             } else {
-                HStack(spacing: gap) {
-                    ForEach(cards) { card in
+                HStack(spacing: 0) {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                         CardFrame(kind: card.kind) { body(of: card.kind) }
-                            .frame(width: unit * card.width.weight)
+                            .frame(width: widths[index])
+                        if index < cards.count - 1 {
+                            resizeHandle(after: index, cards: cards, minimums: minimums, available: available)
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// The gap between two cards: dragging it widens one and narrows the other.
+    private func resizeHandle(after index: Int, cards: [CardConfig], minimums: [Double], available: Double) -> some View {
+        Color.clear
+            .frame(width: gap)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            // Global, because the handle itself moves as the cards resize.
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    let start = dragging?.start ?? cards.map(\.weight)
+                    let live = CardLayout.resize(start, at: index, by: drag.translation.width, minimums: minimums, in: available)
+                    dragging = (start, live)
+                }
+                .onEnded { _ in
+                    guard let live = dragging?.live else { return }
+                    dragging = nil
+                    for (card, weight) in zip(cards, live) {
+                        if let i = hub.workspace.data.settings.cards.firstIndex(where: { $0.kind == card.kind }) {
+                            hub.workspace.data.settings.cards[i].weight = weight
+                        }
+                    }
+                })
+            .help("Drag to resize the cards on either side")
     }
 
     @ViewBuilder

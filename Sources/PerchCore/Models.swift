@@ -332,8 +332,19 @@ public struct CardConfig: Codable, Equatable, Identifiable, Sendable {
             case .agenda: "Events"
             }
         }
+
+        /// Points below which the card's controls start to clip or wrap, so dragging stops there.
+        public var minWidth: Double {
+            switch self {
+            case .focus: 150
+            case .tasks: 270 // the tabs and the day picker wrap below this
+            case .notes: 140
+            case .agenda: 140
+            }
+        }
     }
 
+    /// The S, M and L presets in Customize. Dragging the gap between cards sets any weight in between.
     public enum Width: String, Codable, CaseIterable, Sendable {
         case narrow, regular, wide
 
@@ -348,13 +359,25 @@ public struct CardConfig: Codable, Equatable, Identifiable, Sendable {
 
     public var kind: Kind
     public var visible: Bool
-    public var width: Width
+    /// The card's share of the row, relative to the other visible cards.
+    public var weight: Double
     public var id: Kind { kind }
 
     public init(kind: Kind, visible: Bool = true, width: Width = .regular) {
         self.kind = kind
         self.visible = visible
-        self.width = width
+        self.weight = width.weight
+    }
+
+    private enum OlderKeys: String, CodingKey { case width }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        visible = c.lenient(.visible, true)
+        // Files from before drag-to-resize store a preset instead of a weight.
+        let older = try decoder.container(keyedBy: OlderKeys.self)
+        weight = c.lenient(.weight, older.lenient(.width, Width.regular).weight)
     }
 }
 
