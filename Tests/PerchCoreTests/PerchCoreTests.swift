@@ -543,6 +543,119 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(back.tasks.first?.title, "good")
         XCTAssertEqual(String(decoding: try Data(contentsOf: aside), as: UTF8.self), "not json", "kept for inspection")
     }
+
+    func testRestoreKeepsACopyOfTheCurrentDataThenReplacesIt() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        old.add("restored", defaultDay: nil)
+        old.focusStart(minutes: 25)
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        XCTAssertEqual(w.data.tasks.map(\.title), ["Restored"])
+        XCTAssertEqual(w.data.focus.phase, .paused, "a timer running in the backup would count all the time since")
+        XCTAssertEqual(copy.deletingLastPathComponent(), url.deletingLastPathComponent())
+        XCTAssertNotEqual(copy, url)
+        XCTAssertEqual(try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy)), before)
+        guard case .loaded(let saved) = Store(url: url).load() else { return XCTFail("the restore is on disk before it's shown") }
+        XCTAssertEqual(saved.tasks.map(\.title), ["Restored"])
+    }
+
+    func testRestoreKeepsFocusTimeThatWasRunningAndDoesntRingOldReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        let call = old.add("call bob at 10:15", defaultDay: nil)!
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, advance) = makeWorkspace()
+        w.focusStart(minutes: 25)
+        advance(1200)
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+        let kept = try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy))
+        XCTAssertEqual(kept.focus.phase, .paused, "restoring the copy gives back the 20 minutes of focus")
+        XCTAssertEqual(kept.focus.accumulated, 1200)
+        XCTAssertEqual(w.task(call.id)?.title, "Call bob")
+        XCTAssertTrue(w.takeDueReminders().isEmpty, "a reminder that came due before the restore already rang")
+    }
+
+    func testARestoredBackupWinsOverReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        func linked(_ title: String, _ remoteId: String?) -> TaskItem {
+            var task = TaskItem(title: title, now: saturday.addingTimeInterval(-7200))
+            task.remoteId = remoteId
+            return task
+        }
+        var backup = AppData()
+        backup.tasks = [linked("Kept", "R1"), linked("Deleted since", "R2"), linked("Never synced", nil)]
+        backup.settings.remindersSync = false
+
+        let (w, _) = makeWorkspace()
+        w.data.tasks = [linked("Edited since", "R1"), linked("Added since", "R3")]
+        w.data.settings.remindersSync = true
+        w.data.settings.reminderListId = "L"
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "R1", title: "Edited since", modifiedAt: saturday.addingTimeInterval(-60)),
+                         RemoteReminder(id: "R3", title: "Added since")]
+        let ids = backup.tasks.map(\.id)
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes), [
+            .deleteRemote("R3"),
+            .pushRemote(ids[0], remoteId: "R1"),
+            .createRemote(ids[1]),
+            .createRemote(ids[2]),
+        ], "the backup's version is pushed, a deleted reminder is made again, and one added since goes")
+        XCTAssertTrue(w.data.settings.remindersSync, "sync is this Mac's setting, not the backup's")
+    }
+
+    func testARestoreKeepsTheRemindersOfTasksStillHere() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
+        var backup = AppData()
+        backup.tasks = [alpha] // saved before sync was turned on, so it has no link
+
+        let (w, _) = makeWorkspace()
+        var linked = alpha
+        linked.remoteId = "N1"
+        var beta = TaskItem(title: "Beta", now: saturday)
+        beta.remoteId = "N2"
+        w.data.tasks = [linked, beta]
+        w.data.settings.reminderListId = "L" // synced before, though sync is off right now
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "N1", title: "Alpha"), RemoteReminder(id: "N2", title: "Beta")]
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes),
+                       [.deleteRemote("N2")], "Alpha keeps its reminder rather than getting a new one")
+    }
+
+    func testRestoreChangesNothingIfTheCopyCantBeWritten() {
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        var changes = 0
+        w.onChange = { changes += 1 }
+        var backup = AppData()
+        backup.tasks = [TaskItem(title: "restored")]
+        XCTAssertThrowsError(try w.restore(backup, keepingCopyIn: Store(url: tempURL()))) // its folder doesn't exist
+        XCTAssertEqual(w.data, before)
+        XCTAssertEqual(changes, 0, "no save, sync or wake is scheduled either")
+    }
+
+    func testFilesThatArentBackupsAreRejected() throws {
+        for raw in ["", "not json", "[]", "{}", #"{"tasks":"no"}"#, #"{"tasks":[{"title":"no id"}]}"#] {
+            XCTAssertThrowsError(try Store.decoder.decode(AppData.self, from: Data(raw.utf8)), raw) { error in
+                XCTAssertTrue(error is DecodingError, "the Settings message relies on it: \(raw)")
+            }
+        }
+        XCTAssertNoThrow(try Store.decoder.decode(AppData.self, from: Workspace().exportJSON()))
+    }
 }
 
 final class AgentConfigTests: XCTestCase {
