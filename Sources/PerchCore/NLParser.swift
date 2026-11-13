@@ -49,9 +49,26 @@ private struct Cutter {
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return }
         text = re.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: template)
     }
+
+    /// Replaces every match with what `replacement` makes of its capture groups. A match with a capital letter past
+    /// the start of the text is left alone: there "Maine", "LA" or "Joi" is a name, not Romanian.
+    mutating func rewriteWords(_ pattern: String, _ replacement: ([String?]) -> String) {
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return }
+        let ns = NSMutableString(string: text)
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let groups: [String?] = (0..<m.numberOfRanges).map {
+                let r = m.range(at: $0)
+                return r.location == NSNotFound ? nil : ns.substring(with: r)
+            }
+            if m.range.location > 0, groups[0]?.contains(where: \.isUppercase) == true { continue }
+            ns.replaceCharacters(in: m.range, with: replacement(groups))
+        }
+        text = ns as String
+    }
 }
 
-/// English task phrases: "call mom tomorrow at 5pm", "standup every weekday at 9:30 !high #work", "invoice by friday".
+/// English and Romanian task phrases: "call mom tomorrow at 5pm", "standup every weekday at 9:30 !high #work", "invoice by friday",
+/// "sună-o pe mama mâine la 5". Numeric dates such as "12/25" are read in the order of the locale's short date format.
 public enum NLParser {
     private static let fullDays = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
     private static let shortDays = ["sun": 1, "mon": 2, "tue": 3, "tues": 3, "wed": 4, "thu": 5, "thur": 5, "thurs": 5, "fri": 6, "sat": 7]
@@ -60,6 +77,7 @@ public enum NLParser {
         "jun": 6, "june": 6, "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9,
         "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
     ]
+    private static let monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
     private static let numberWords = [
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
         "eleven": 11, "twelve": 12, "a": 1, "an": 1,
@@ -69,22 +87,34 @@ public enum NLParser {
     private static let shortDayAlt = "tues|tue|sun|mon|wed|thurs|thur|thu|fri|sat"
     private static let monthAlt = "january|february|march|april|may|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec"
     private static let ordinal = "(?:st|nd|rd|th)?"
-    private static var dayExpr: String {
+    private static func dayExpr(_ numeric: NumericDate) -> String {
         "today|tomorrow|tmrw|next week|next month|(?:next |this )?(?:\(fullDayAlt)|\(shortDayAlt))"
-            + "|(?:\(monthAlt))\\.? \\d{1,2}\(ordinal)|\\d{1,2}\(ordinal) (?:of )?(?:\(monthAlt))"
+            + "|(?:\(monthAlt))\\.? \\d{1,2}\(ordinal)|\\d{1,2}\(ordinal) (?:of )?(?:\(monthAlt))|\(numeric.afterWord)"
     }
 
-    public static func parse(_ input: String, now: Date = Date(), calendar: Calendar = .current) -> ParsedTask {
-        var s = Cutter(text: normalized(input))
+    /// `locale` decides whether "3/4" is March 4 or April 3; `.current` follows the Mac's date format setting.
+    public static func parse(_ input: String, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> ParsedTask {
+        // A Romanian word read as English but not used as a date ends up in the title in English ("x și friday"),
+        // so it wasn't a date: the text is read again without Romanian, and the title stays as typed.
+        let result = parse(input, now: now, calendar: calendar, locale: locale, romanian: true)
+        func words(_ text: String) -> Set<String> {
+            Set(text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).split { !$0.isLetter && !$0.isNumber }.map(String.init))
+        }
+        return words(result.title).isSubset(of: words(input)) ? result : parse(input, now: now, calendar: calendar, locale: locale, romanian: false)
+    }
+
+    private static func parse(_ input: String, now: Date, calendar: Calendar, locale: Locale, romanian: Bool) -> ParsedTask {
+        var s = Cutter(text: normalized(input, romanian: romanian))
         var result = ParsedTask()
         let today = Day.key(now, calendar: calendar)
+        let numeric = NumericDate(locale: locale)
 
         result.priority = takePriority(&s)
         result.project = takeProject(&s)
         result.repeatRule = takeRepeat(&s)
 
-        if let m = s.take("\\b(?:due(?: on| by)?|by|deadline)\\s+(\(dayExpr))\\b"), let expr = m[1] {
-            result.deadline = dayKey(from: expr, today: today, calendar: calendar)
+        if let m = s.take("\\b(?:due(?: on| by)?|by|deadline)\\s+(\(dayExpr(numeric)))\\b"), let expr = m[1] {
+            result.deadline = dayKey(from: expr, today: today, numeric: numeric, calendar: calendar)
         }
 
         var relative: Date?
@@ -118,7 +148,7 @@ public enum NLParser {
             explicitDay = today
         }
 
-        if let day = takeDay(&s, today: today, calendar: calendar) { explicitDay = day }
+        if let day = takeDay(&s, today: today, numeric: numeric, calendar: calendar) { explicitDay = day }
 
         let firstRepeat = result.repeatRule?.first(onOrAfter: today, calendar: calendar)
 
@@ -152,6 +182,32 @@ public enum NLParser {
         return result
     }
 
+    /// "12/25", "25.12.", "25/12/2026": day and month in the locale's order, its separator or a slash, an optional year at the end.
+    private struct NumericDate {
+        /// Where a date can stand on its own.
+        var pattern: String
+        /// After "on" or "by", where a bare "15.2" can only be a date.
+        var afterWord: String
+        var dayFirst: Bool
+
+        init(locale: Locale) {
+            let f = DateFormatter()
+            f.locale = locale
+            f.dateStyle = .short
+            let format = f.dateFormat ?? "M/d/y"
+            dayFirst = (format.firstIndex(of: "d") ?? format.endIndex) < (format.firstIndex(of: "M") ?? format.endIndex)
+            let own = format.first { !$0.isLetter && !$0.isWhitespace && $0 != "'" } ?? "/"
+            let sep = "[\\/\\\(own)]"
+            let day = "(0?[1-9]|[12]\\d|3[01])", month = "(0?[1-9]|1[0-2])"
+            // The lookarounds keep a date from being cut out of a longer number ("1.2.3", "10.50").
+            afterWord = "(?<![\\w./-])" + (dayFirst ? day + sep + month : month + sep + day)
+                + "(?:\(sep)(\\d{4}|\\d{2})|\(sep)?)(?![\\w]|[./-]\\d)"
+            // A bare "26.1" or "2.5" is more often a version or an amount than a date, so on its own a date written
+            // with the locale's separator needs its closing separator or a year: "25.12.", "25.12.2026".
+            pattern = own == "/" ? afterWord : "(?=\\d{1,2}/|\\d{1,2}\\\(own)\\d{1,2}\\\(own))" + afterWord
+        }
+    }
+
     private struct Clock {
         var hour: Int
         var minute: Int
@@ -159,8 +215,9 @@ public enum NLParser {
         var explicit: Bool
     }
 
-    private static func normalized(_ input: String) -> String {
+    private static func normalized(_ input: String, romanian: Bool) -> String {
         var s = Cutter(text: input.replacingOccurrences(of: "’", with: "'"))
+        if romanian { fromRomanian(&s) }
         s.rewrite("\\b([ap])\\.\\s?m\\.?", "$1m")
         s.rewrite("\\s*o'?clock\\b", " ")
         for (word, value) in numberWords where word.count > 2 {
@@ -168,6 +225,80 @@ public enum NLParser {
             s.rewrite("\\b\(word)(\\s*(?:am|pm)\\b)", "\(value)$1")
         }
         return s.text
+    }
+
+    private static let roDays = [
+        ("luni|lunea", "monday"), ("marți|marțea", "tuesday"), ("miercuri|miercurea", "wednesday"), ("joi|joia", "thursday"),
+        ("vineri|vinerea", "friday"), ("sâmbătă", "saturday"), ("duminică", "sunday"),
+    ]
+    private static let roMonths = ["ianuarie", "februarie", "martie", "aprilie", "mai", "iunie", "iulie", "august", "septembrie", "octombrie", "noiembrie", "decembrie"]
+    private static let roNumbers = ["o": 1, "un": 1, "una": 1, "doi": 2, "doua": 2, "trei": 3, "patru": 4, "cinci": 5, "sase": 6, "sapte": 7, "opt": 8, "noua": 9, "zece": 10]
+
+    /// A Romanian pattern that also matches text typed without diacritics, which is common.
+    private static func ro(_ pattern: String) -> String {
+        pattern.map { c -> String in
+            switch c {
+            case "ă": "[ăa]"
+            case "â": "[âa]"
+            case "î": "[îi]"
+            case "ș": "[șşs]"
+            case "ț": "[țţt]"
+            default: String(c)
+            }
+        }.joined()
+    }
+
+    /// Rewrites Romanian dates, times and repeats into the English phrases parsed below, so "sună-o pe mama mâine la 5"
+    /// keeps "Sună-o pe mama" as its title. Words that are also ordinary words only count in a date's context: "mai"
+    /// (more) after a day number, "luni" (months) not after a number or a quantity, "la" before a number only where a
+    /// time can go. A rewrite the parser doesn't then use is undone by `parse`.
+    private static func fromRomanian(_ s: inout Cutter) {
+        let fold = { (word: String?) in (word ?? "").folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
+        func rewrite(_ pattern: String, _ template: String) {
+            s.rewriteWords(ro(pattern)) { template.replacingOccurrences(of: "$1", with: $0.count > 1 ? $0[1] ?? "" : "") }
+        }
+        rewrite("\\b(?:în|peste)\\s+(?:o\\s+)?jumătate\\s+de\\s+oră\\b", "in half an hour")
+        s.rewriteWords(ro("\\b(?:în|peste)\\s+(\\d+|\(roNumbers.keys.joined(separator: "|"))|două|nouă|șase|șapte)\\s+(?:de\\s+)?(minute?|or[ăe]|zi|zile|săptămân[ăi]|lun[ăi])\\b")) { m in
+            let unit = fold(m[2])
+            let english = unit.hasPrefix("min") ? "minutes" : unit.hasPrefix("or") ? "hours" : unit.hasPrefix("z") ? "days" : unit.hasPrefix("s") ? "weeks" : "months"
+            return "in \(Int(m[1] ?? "") ?? roNumbers[fold(m[1])] ?? 1) \(english)"
+        }
+        rewrite("\\bpoimâine\\b", "day after tomorrow")
+        rewrite("\\bmâine\\b", "tomorrow")
+        rewrite("\\b(?:astăzi|azi)\\b", "today")
+        rewrite("\\b(?:diseară|deseară|în seara asta)\\b", "tonight")
+        rewrite("\\bsăptămâna viitoare\\b", "next week")
+        rewrite("\\bluna viitoare\\b", "next month")
+        for (romanian, english) in roDays {
+            rewrite("\\b(?:\(romanian))\\s+viito(?:are|r)\\b", "next \(english)")
+            rewrite("(?<!\\d |câteva |multe |următoarele |ultimele |două |trei |patru |cinci |șase |șapte |opt |nouă |zece )\\b(?:\(romanian))\\b(?!\\s+de\\s+zile)", english)
+        }
+        for (i, month) in roMonths.enumerated() {
+            rewrite("\\b(\\d{1,2})\\s+\(month)\\b", "$1 \(monthNames[i])")
+        }
+        let day = "today|tomorrow|day after|next|\(fullDayAlt)"
+        let date = "\\d{1,2}\\s+(?:\(monthAlt))\\b|\\d{1,2}[./-]\\d{1,2}"
+        rewrite("\\b(\(day))\\s+(?:dimineața|dimineață)\\b", "$1 morning")
+        rewrite("\\b(\(day))\\s+(?:după-amiaza|după-amiază|după amiaza|după-masă|după masa)\\b", "$1 afternoon")
+        rewrite("\\b(\(day))\\s+(?:seara|seară)\\b", "$1 evening")
+        rewrite("\\b(\(fullDayAlt)),?\\s+și\\s+(?=\(fullDayAlt))", "$1 and ")
+        rewrite("\\b(?:în fiecare zi lucrătoare|în zilele lucrătoare)\\b", "every weekday")
+        rewrite("\\b(?:în fiecare zi|zilnic)\\b", "every day")
+        rewrite("\\b(?:în fiecare săptămână|săptămânal)\\b", "weekly")
+        rewrite("\\bîn fiecare lună\\b", "monthly")
+        rewrite("\\bîn fiecare an\\b", "yearly")
+        rewrite("\\bîn fiecare\\s+(?=\(fullDayAlt))", "every ")
+        let clock = "\\bla\\s+(?:ora\\s+)?(\\d{1,2}(?:[:.]\\d{2})?)\\s+"
+        rewrite(clock + "(?:dimineața|dimineață)\\b", "at $1am")
+        rewrite(clock + "(?:seara|seară|după-amiaza|după-amiază|după-masă)\\b", "at $1pm")
+        let hour = "(?:[01]?\\d|2[0-3])(?:[:.][0-5]\\d)?\\b(?![./]\\d|\\s+(?:\(monthAlt))\\b)"
+        rewrite("\\bla\\s+ora\\s+(?=\(hour))", "at ")
+        // A bare "la 3" is a time only where the sentence ends or a date goes on: "la 3 colegi" is "to 3 colleagues".
+        rewrite("\\bla\\s+(?=\(hour)(?:\\s*$|\\s*[,;.!?]|\\s+(?:la|pe|și|în|până|and|on|by|every|today|tomorrow|tonight|day|next|\(fullDayAlt))\\b))", "at ")
+        rewrite("\\bla\\s+prânz\\b", "at noon")
+        rewrite("\\bla\\s+miezul\\s+nopții\\b", "at midnight")
+        rewrite("\\bpână(?:\\s+(?:pe|la|în))?\\s+(?=\(day)|\(date))", "by ")
+        rewrite("\\bpe\\s+(?=\(day)|\(date))", "on ")
     }
 
     private static func takePriority(_ s: inout Cutter) -> Priority {
@@ -234,7 +365,7 @@ public enum NLParser {
     }
 
     private static func takeClock(_ s: inout Cutter) -> Clock? {
-        if let m = s.take("\\b(?:at\\s+|@\\s*)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\b") {
+        if let m = s.take("\\b(?:at\\s+|@\\s*)?(\\d{1,2})(?:[:.](\\d{2}))?\\s*(am|pm)\\b") {
             var hour = Int(m[1] ?? "") ?? 0
             let minute = Int(m[2] ?? "") ?? 0
             guard (1...12).contains(hour), minute < 60 else { return nil }
@@ -264,7 +395,7 @@ public enum NLParser {
         }
     }
 
-    private static func takeDay(_ s: inout Cutter, today: String, calendar: Calendar) -> String? {
+    private static func takeDay(_ s: inout Cutter, today: String, numeric: NumericDate, calendar: Calendar) -> String? {
         if s.take("\\b(?:the )?day after tomorrow\\b") != nil { return Day.adding(2, to: today, calendar: calendar) }
         if s.take("\\b(?:tomorrow|tmrw)\\b") != nil { return Day.adding(1, to: today, calendar: calendar) }
         if s.take("\\btoday\\b") != nil { return today }
@@ -283,6 +414,13 @@ public enum NLParser {
             let date = Int(m[2] ?? m[3] ?? "") ?? 1
             return monthDay(month, date, year: m[5].flatMap { Int($0) }, today: today, calendar: calendar)
         }
+        if let m = s.take("\\bon\\s+" + numeric.afterWord) ?? s.take(numeric.pattern) {
+            let first = Int(m[1] ?? "") ?? 1, second = Int(m[2] ?? "") ?? 1
+            let year = m[3].flatMap { Int($0) }.map { $0 < 100 ? 2000 + $0 : $0 }
+            return numeric.dayFirst
+                ? monthDay(second, first, year: year, today: today, calendar: calendar)
+                : monthDay(first, second, year: year, today: today, calendar: calendar)
+        }
         if let m = s.take("\\bnext (week|month)\\b") {
             if m[1]?.lowercased() == "month" {
                 return Day.key(calendar.date(byAdding: .month, value: 1, to: Day.date(today, calendar: calendar))!, calendar: calendar)
@@ -297,9 +435,9 @@ public enum NLParser {
         return nil
     }
 
-    private static func dayKey(from expr: String, today: String, calendar: Calendar) -> String? {
-        var s = Cutter(text: expr)
-        return takeDay(&s, today: today, calendar: calendar) ?? {
+    private static func dayKey(from expr: String, today: String, numeric: NumericDate, calendar: Calendar) -> String? {
+        var s = Cutter(text: "on " + expr)  // it came after "by", so a bare "25.12" counts
+        return takeDay(&s, today: today, numeric: numeric, calendar: calendar) ?? {
             // takeDay leaves bare short names alone so "sat with mom" stays a title; after "by" they're unambiguous.
             let lower = expr.lowercased()
             return shortDays[lower].map { upcoming(weekday: $0, next: false, from: today, calendar: calendar) }
@@ -319,10 +457,13 @@ public enum NLParser {
 
     private static func monthDay(_ month: Int, _ date: Int, year: Int?, today: String, calendar: Calendar) -> String? {
         let thisYear = calendar.component(.year, from: Day.date(today, calendar: calendar))
-        func key(_ y: Int) -> String { String(format: "%04d-%02d-%02d", y, month, date) }
-        guard (1...31).contains(date) else { return nil }
+        // Only days that exist: "31/11" or "february 30" is a typo.
+        func key(_ y: Int) -> String? {
+            DateComponents(calendar: calendar, year: y, month: month, day: date).isValidDate ? String(format: "%04d-%02d-%02d", y, month, date) : nil
+        }
         if let year { return key(year) }
-        return key(thisYear) >= today ? key(thisYear) : key(thisYear + 1)
+        if let this = key(thisYear), this >= today { return this }
+        return key(thisYear + 1)
     }
 
     private static func cleanTitle(_ text: String) -> String {

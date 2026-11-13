@@ -92,13 +92,13 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Suggest a priority and project", isOn: $ws.data.settings.autoClassify)
+                Toggle("Fill in priority, project and dates", isOn: $ws.data.settings.autoClassify)
                     .disabled(!AutoClassifier.isAvailable)
             } header: {
                 Text("Apple Intelligence")
             } footer: {
                 Text(AutoClassifier.isAvailable
-                    ? "New tasks get a priority and project from Apple's on-device model. Anything you set yourself is left alone."
+                    ? "New tasks get a priority and project from Apple's on-device model. When a task's date is in a language Perch doesn't read itself, such as German or Japanese, the model fills it in and takes those words out of the title. Anything you set yourself is left alone."
                     : "Needs macOS 26 with Apple Intelligence turned on.")
             }
 
