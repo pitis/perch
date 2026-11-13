@@ -263,29 +263,33 @@ final class ClipsManager {
 
     // MARK: Using a clip
 
-    /// Called with a clip removed because its file was moved or deleted, so the panel can say so.
+    /// Called with a clip removed because copying or opening it found its file gone, so the panel can say so.
     @ObservationIgnored var onGone: ((Clip) -> Void)?
 
-    /// Runs `use` once the clip's file is known to still be there, checked off the main thread, because a file in a
-    /// protected folder can wait on a macOS prompt. A clip whose file is gone is removed instead, and nothing else changes.
+    /// Runs `use` unless the clip's file is gone (a denied permission counts as there), checked off the main thread,
+    /// because a file in a protected folder can wait on a macOS prompt. A gone clip is removed instead, and nothing
+    /// else changes.
     private func ifPresent(_ clip: Clip, _ use: @escaping () -> Void) {
         guard clip.text == nil, let path = clip.path else { return use() }
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let gone = FileCheck.isGone(path)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
-                if gone {
-                    self.remove(clip)
-                    self.onGone?(clip)
-                } else {
-                    use()
-                }
+                guard gone else { return use() }
+                guard self.clips.contains(where: { $0.id == clip.id }) else { return } // removed meanwhile
+                self.remove(clip)
+                self.onGone?(clip)
             }
         }
     }
 
     func copy(_ clip: Clip) {
-        ifPresent(clip) { [weak self] in self?.copyNow(clip) }
+        let before = NSPasteboard.general.changeCount
+        ifPresent(clip) { [weak self] in
+            // Something copied while the check waited on a prompt is newer, so it stays on the clipboard.
+            guard NSPasteboard.general.changeCount == before else { return }
+            self?.copyNow(clip)
+        }
     }
 
     private func copyNow(_ clip: Clip) {

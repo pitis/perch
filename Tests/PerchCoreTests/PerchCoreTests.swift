@@ -851,6 +851,7 @@ final class ProtectedFoldersTests: XCTestCase {
         let fm = FileManager.default
         let folder = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: folder) }
         let file = folder.appendingPathComponent("clip.png")
         try Data().write(to: file)
         XCTAssertFalse(FileCheck.isGone(file.path))
@@ -859,6 +860,7 @@ final class ProtectedFoldersTests: XCTestCase {
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
         try fm.removeItem(at: file)
         XCTAssertTrue(FileCheck.isGone(file.path))
+        XCTAssertFalse(FileCheck.isGone("/Volumes/Unplugged-\(UUID().uuidString)/clip.png"), "a drive that's away isn't a deleted file")
     }
 
     private let folders = ["/Users/me/Desktop", "/Users/me/Documents", "/Volumes"].map { URL(fileURLWithPath: $0) }
