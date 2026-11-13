@@ -459,16 +459,39 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(copy.deletingLastPathComponent(), url.deletingLastPathComponent())
         XCTAssertNotEqual(copy, url)
         XCTAssertEqual(try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy)), before)
+        guard case .loaded(let saved) = Store(url: url).load() else { return XCTFail("the restore is on disk before it's shown") }
+        XCTAssertEqual(saved.tasks.map(\.title), ["Restored"])
+    }
+
+    func testRestoreKeepsFocusTimeThatWasRunningAndDoesntRingOldReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        let call = old.add("call bob at 10:15", defaultDay: nil)!
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, advance) = makeWorkspace()
+        w.focusStart(minutes: 25)
+        advance(1200)
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+        let kept = try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy))
+        XCTAssertEqual(kept.focus.phase, .paused, "restoring the copy gives back the 20 minutes of focus")
+        XCTAssertEqual(kept.focus.accumulated, 1200)
+        XCTAssertEqual(w.task(call.id)?.title, "Call bob")
+        XCTAssertTrue(w.takeDueReminders().isEmpty, "a reminder that came due before the restore already rang")
     }
 
     func testRestoreChangesNothingIfTheCopyCantBeWritten() {
         let (w, _) = makeWorkspace()
         w.add("current", defaultDay: nil)
         let before = w.data
+        var changes = 0
+        w.onChange = { changes += 1 }
         var backup = AppData()
         backup.tasks = [TaskItem(title: "restored")]
         XCTAssertThrowsError(try w.restore(backup, keepingCopyIn: Store(url: tempURL()))) // its folder doesn't exist
         XCTAssertEqual(w.data, before)
+        XCTAssertEqual(changes, 0, "no save, sync or wake is scheduled either")
     }
 
     func testFilesThatArentBackupsAreRejected() throws {

@@ -127,7 +127,7 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Full dashboard window
 - Launch at login
 - JSON backup export
-- Restoring a JSON backup, after a confirmation and keeping a copy of the current data; files that aren't backups are refused (unit-tested) ([#20](https://github.com/pitis/perch/issues/20))
+- Restoring a JSON backup, after a confirmation and keeping a copy of the current data; files Perch can't read as a backup are refused (unit-tested) ([#20](https://github.com/pitis/perch/issues/20))
 
 ## Not done: not built yet
 

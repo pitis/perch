@@ -161,16 +161,21 @@ struct SettingsView: View {
             do {
                 backup = try Store.decoder.decode(AppData.self, from: Data(contentsOf: url))
             } catch is DecodingError {
-                backupMessage = "\(name) isn't a Perch backup. Nothing was changed."
+                backupMessage = "Perch can't read \(name) as a backup. Nothing was changed."
                 return
             } catch {
-                backupMessage = "Couldn't read \(name): \(error.localizedDescription)"
+                backupMessage = "Couldn't open \(name). Nothing was changed. \(error.localizedDescription)"
                 return
             }
 
             let alert = NSAlert()
             alert.messageText = "Replace your Perch data with this backup?"
-            alert.informativeText = "Your tasks, notes, focus history and settings will be replaced by the ones in \(name). A copy of your current data is kept first."
+            let now = hub.workspace.data
+            alert.informativeText = """
+                \(name) has \(backup.tasks.count) tasks and notes on \(backup.notes.count) days. You have \(now.tasks.count) tasks and notes on \(now.notes.count) days now.
+
+                Your tasks, notes, focus history and settings will be replaced. Clips and Launch at login aren't affected. A copy of your current data is saved first.
+                """
             alert.addButton(withTitle: "Replace")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -179,7 +184,7 @@ struct SettingsView: View {
                 let copy = try hub.restoreBackup(backup)
                 backupMessage = "Restored \(name). Your previous data is in \((copy.path as NSString).abbreviatingWithTildeInPath)."
             } catch {
-                backupMessage = "Couldn't restore: \(error.localizedDescription) Nothing was changed."
+                backupMessage = "Couldn't restore \(name), so nothing was changed. \(error.localizedDescription)"
             }
         }
     }

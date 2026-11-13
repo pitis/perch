@@ -382,12 +382,25 @@ public final class Workspace {
         try Store.encoder.encode(data)
     }
 
-    /// Replaces all data with a backup, after keeping a copy of the current data beside `store`, and returns that copy.
-    /// If the copy can't be written, nothing changes.
+    /// Replaces all data with a backup and saves it, after keeping a copy of the current data beside `store`, and returns
+    /// where the copy is. If the copy or the save fails, nothing changes.
     public func restore(_ backup: AppData, keepingCopyIn store: Store) throws -> URL {
-        let copy = try store.keepCopy(data)
-        data = backup
-        recoverFocusAfterLaunch() // a timer running in the backup would count all the time since it was made
+        var current = data
+        if current.focus.phase == .running { // as quitting does, so restoring the copy gives the running time back
+            closeSegment(&current.focus)
+            current.focus.phase = .paused
+        }
+        let copy = try store.keepCopy(current)
+        var next = backup
+        if next.focus.phase == .running { // it would count all the time since the backup was made
+            next.focus.runningSince = nil
+            next.focus.phase = .paused
+        }
+        for i in next.tasks.indices where next.tasks[i].reminderAt.map({ $0 <= now }) == true {
+            next.tasks[i].reminderFiredAt = now // reminders that came due before now aren't rung again
+        }
+        try store.save(next)
+        data = next
         return copy
     }
 }
