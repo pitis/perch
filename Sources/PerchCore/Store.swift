@@ -65,18 +65,26 @@ public struct Store {
     }
 }
 
-/// Folders macOS guards with a permission prompt: Desktop, Documents, Downloads, and removable and network volumes.
-/// Touching anything inside one before the user has answered blocks until they do.
+/// Folders macOS guards with a permission prompt that clips come from: Desktop, Documents, Downloads, iCloud Drive
+/// and other cloud folders, and everything under /Volumes. Touching anything inside one before the user has
+/// answered blocks until they do.
 public enum ProtectedFolders {
     public static let all = [FileManager.SearchPathDirectory.desktopDirectory, .documentDirectory, .downloadsDirectory]
-        .map { FileManager.default.urls(for: $0, in: .userDomainMask)[0] } + [URL(fileURLWithPath: "/Volumes")]
+        .map { FileManager.default.urls(for: $0, in: .userDomainMask)[0] }
+        + ["Mobile Documents", "CloudStorage"].map { FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent($0) }
+        + [URL(fileURLWithPath: "/Volumes")]
 
     /// Whether touching `path` could raise that prompt. `granted` is a folder Perch already reads, such as the
     /// screenshot folder it watches, and covers the whole protected folder it's in.
     public static func mayPrompt(_ path: String, granted: URL?, protected: [URL] = all) -> Bool {
-        func inside(_ path: String, _ folder: URL) -> Bool { path == folder.path || path.hasPrefix(folder.path + "/") }
-        return protected.contains { folder in
-            inside(path, folder) && !(granted.map { inside($0.path, folder) } ?? false)
+        // The protected folder a path is in, lowercased because the default volume ignores case. Each volume counts
+        // as its own folder, since access to a USB drive doesn't cover a network share.
+        func area(_ path: String) -> String? {
+            let path = path.lowercased()
+            guard let folder = protected.map({ $0.path.lowercased() }).first(where: { path == $0 || path.hasPrefix($0 + "/") }) else { return nil }
+            return folder == "/volumes" ? path.split(separator: "/").prefix(2).joined(separator: "/") : folder
         }
+        guard let folder = area(path) else { return false }
+        return granted.flatMap { area($0.path) } != folder
     }
 }

@@ -15,7 +15,8 @@ struct Clip: Codable, Identifiable, Equatable {
     var ownsFile = false
     var copiedAt: Date?
 
-    var url: URL? { path.map { URL(fileURLWithPath: $0) } }
+    // `isDirectory:` keeps this from checking the disk, which can block on a prompt for a protected folder.
+    var url: URL? { path.map { URL(fileURLWithPath: $0, isDirectory: false) } }
     var title: String { url?.lastPathComponent ?? String((text ?? "").prefix(60)) }
 }
 
@@ -100,12 +101,13 @@ final class ClipsManager {
     }
 
     /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
-    /// protected folder Perch hasn't been granted are never checked, because that could raise a macOS prompt.
-    /// Their clips stay, and opening or dragging one whose file is gone does nothing.
+    /// protected folder are skipped unless it holds the screenshot folder Perch watches, because checking them
+    /// could raise a macOS prompt, so their clips stay even after the file is gone.
     func pruneMissing() {
         let paths = clips.compactMap(\.path).filter { !ProtectedFolders.mayPrompt($0, granted: watchedFolder) }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let missing = Set(paths.filter { !FileManager.default.fileExists(atPath: $0) })
+            // Only a file that's really gone, not one Perch was refused access to.
+            let missing = Set(paths.filter { Darwin.access($0, F_OK) != 0 && errno == ENOENT })
             guard !missing.isEmpty else { return }
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -186,6 +188,7 @@ final class ClipsManager {
                 source.setCancelHandler { close(fd) }
                 source.resume()
                 self.watcher = source
+                self.pruneMissing()
             }
         }
     }
@@ -289,8 +292,7 @@ final class ClipsManager {
     }
 
     func dragProvider(for clip: Clip) -> NSItemProvider {
-        // A file clip that can't be dragged as a file drags nothing, rather than an empty piece of text.
-        if let url = clip.url { return NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+        if let url = clip.url, let provider = NSItemProvider(contentsOf: url) { return provider }
         return NSItemProvider(object: (clip.text ?? "") as NSString)
     }
 }

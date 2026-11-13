@@ -154,7 +154,7 @@ private struct ClipCard: View {
 
     private func loadThumbnail() async {
         guard thumbnail == nil, let url = clip.url else { return }
-        // Off the main thread: reading a file in a protected folder can block on a macOS prompt.
+        // Off the main thread, so a macOS prompt for a file in a protected folder can't freeze the panel.
         let size = Self.size
         let image = await Task.detached {
             let request = QLThumbnailGenerator.Request(fileAt: url, size: size, scale: 2, representationTypes: .all)

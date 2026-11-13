@@ -610,10 +610,22 @@ final class ProtectedFoldersTests: XCTestCase {
         XCTAssertTrue(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Pictures"))
     }
 
+    func testMatchingIgnoresCase() {
+        XCTAssertTrue(mayPrompt("/Users/me/desktop/shot.png"), "the default volume opens this as the Desktop")
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/users/me/desktop"))
+    }
+
+    func testAGrantedVolumeCoversOnlyItself() {
+        XCTAssertFalse(mayPrompt("/Volumes/USB/shot.png", granted: "/Volumes/USB/Shots"))
+        XCTAssertTrue(mayPrompt("/Volumes/NAS/report.pdf", granted: "/Volumes/USB/Shots"))
+    }
+
     func testDefaultsAreTheUsersFolders() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        for name in ["Desktop", "Documents", "Downloads"] {
-            XCTAssertTrue(ProtectedFolders.mayPrompt("\(home)/\(name)/file", granted: nil), name)
+        let paths = ["Desktop", "Documents", "Downloads", "Library/Mobile Documents/com~apple~CloudDocs", "Library/CloudStorage/Dropbox"]
+            .map { "\(home)/\($0)/file" } + ["/Volumes/USB/file"]
+        for path in paths {
+            XCTAssertTrue(ProtectedFolders.mayPrompt(path, granted: nil), path)
         }
         XCTAssertFalse(ProtectedFolders.mayPrompt("\(home)/Pictures/file", granted: nil))
     }
