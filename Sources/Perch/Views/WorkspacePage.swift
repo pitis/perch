@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 struct WorkspacePage: View {
     @Environment(AppHub.self) private var hub
     /// Weights while a gap is being dragged, saved once the drag ends so the store isn't rewritten every frame.
-    @State private var dragging: (start: [Double], live: [Double])?
+    /// Gesture state resets itself if the drag is cancelled, so stale weights never outlive it.
+    @GestureState private var dragged: [Double]?
     private let gap: CGFloat = 8
 
     var body: some View {
@@ -14,7 +15,7 @@ struct WorkspacePage: View {
         GeometryReader { geometry in
             let available = geometry.size.width - gap * CGFloat(max(0, cards.count - 1))
             let minimums = cards.map(\.kind.minWidth)
-            let widths = CardLayout.widths(dragging?.live ?? cards.map(\.weight), minimums: minimums, in: available)
+            let widths = CardLayout.widths(dragged ?? cards.map(\.weight), minimums: minimums, in: available)
             if cards.isEmpty {
                 ContentUnavailableView("All cards are hidden", systemImage: "eye.slash", description: Text("Turn them back on in Customize."))
                     .foregroundStyle(.white.opacity(0.7))
@@ -37,24 +38,23 @@ struct WorkspacePage: View {
         Color.clear
             .frame(width: gap)
             .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            .onContinuousHover { phase in
+                // Set, not pushed: a pushed cursor stays stuck if the panel closes before the pointer leaves.
+                if case .active = phase { NSCursor.resizeLeftRight.set() } else { NSCursor.arrow.set() }
             }
-            // Global, because the handle itself moves as the cards resize.
+            // Global, because the handle itself moves as the cards resize. The stored weights don't change during the
+            // drag, so each frame resizes from them.
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { drag in
-                    let start = dragging?.start ?? cards.map(\.weight)
-                    let live = CardLayout.resize(start, at: index, by: drag.translation.width, minimums: minimums, in: available)
-                    dragging = (start, live)
+                .updating($dragged) { drag, dragged, _ in
+                    dragged = CardLayout.resize(cards.map(\.weight), at: index, by: drag.translation.width, minimums: minimums, in: available)
                 }
-                .onEnded { _ in
-                    guard let live = dragging?.live else { return }
-                    dragging = nil
-                    for (card, weight) in zip(cards, live) {
-                        if let i = hub.workspace.data.settings.cards.firstIndex(where: { $0.kind == card.kind }) {
-                            hub.workspace.data.settings.cards[i].weight = weight
-                        }
+                .onEnded { drag in
+                    let weights = CardLayout.resize(cards.map(\.weight), at: index, by: drag.translation.width, minimums: minimums, in: available)
+                    var all = hub.workspace.data.settings.cards
+                    for (card, weight) in zip(cards, weights) {
+                        if let i = all.firstIndex(where: { $0.kind == card.kind }) { all[i].weight = weight }
                     }
+                    hub.workspace.data.settings.cards = all // one change, so one save
                 })
             .help("Drag to resize the cards on either side")
     }

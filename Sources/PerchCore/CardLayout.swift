@@ -1,8 +1,9 @@
 /// How the visible cards share the workspace row, and how dragging the gap between two of them changes that.
-/// Widths are in points, gaps already taken out.
+/// `available` is the row's width minus the gaps between cards; widths are in points.
 public enum CardLayout {
     /// Widths in proportion to the weights, except that no card goes below its minimum.
-    /// Cards held at their minimum leave the rest of the row to the others, still in proportion.
+    /// Cards held at their minimum leave the rest of the row to the others, still in proportion. If the minimums
+    /// don't fit, every card gets its minimum and the row overflows.
     public static func widths(_ weights: [Double], minimums: [Double], in available: Double) -> [Double] {
         var held = Set<Int>()
         while true {
@@ -19,14 +20,14 @@ public enum CardLayout {
     /// and neither goes below its minimum, so the other cards stay where they are.
     public static func resize(_ weights: [Double], at index: Int, by delta: Double, minimums: [Double], in available: Double) -> [Double] {
         guard weights.indices.contains(index), weights.indices.contains(index + 1) else { return weights }
-        let widths = widths(weights, minimums: minimums, in: available)
-        let pair = widths[index] + widths[index + 1]
-        guard pair > 0 else { return weights }
-        let left = min(max(widths[index] + delta, minimums[index]), pair - minimums[index + 1])
-        let pairWeight = weights[index] + weights[index + 1]
-        var result = weights
-        result[index] = pairWeight * left / pair
-        result[index + 1] = pairWeight - result[index]
-        return result
+        var target = widths(weights, minimums: minimums, in: available)
+        let pair = target[index] + target[index + 1]
+        target[index] = min(max(target[index] + delta, minimums[index]), pair - minimums[index + 1])
+        target[index + 1] = pair - target[index]
+        // Every card's weight comes from its width on screen, so a card held at its minimum is no longer held and
+        // the other cards keep their widths exactly. The total weight stays, so hidden cards keep their share.
+        let scale = weights.reduce(0, +) / target.reduce(0, +)
+        guard scale.isFinite, scale > 0 else { return weights }
+        return target.map { $0 * scale }
     }
 }

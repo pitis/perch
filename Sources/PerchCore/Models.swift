@@ -333,18 +333,20 @@ public struct CardConfig: Codable, Equatable, Identifiable, Sendable {
             }
         }
 
-        /// Points below which the card's controls start to clip or wrap, so dragging stops there.
+        /// The narrowest this card is ever laid out, in points, by a preset or a drag (see `CardLayout.widths`).
+        /// Chosen by rendering: the card's controls still fit on one line at this width.
         public var minWidth: Double {
             switch self {
             case .focus: 150
-            case .tasks: 270 // the tabs and the day picker wrap below this
+            case .tasks: 270 // header, day picker and tabs fit on one line at 270; they wrapped at about 200
             case .notes: 140
             case .agenda: 140
             }
         }
     }
 
-    /// The S, M and L presets in Customize. Dragging the gap between cards sets any weight in between.
+    /// The S, M and L presets in Customize, also used for default cards and files saved before drag-to-resize.
+    /// A dragged weight can match none of them and fall outside their range.
     public enum Width: String, Codable, CaseIterable, Sendable {
         case narrow, regular, wide
 
@@ -359,7 +361,7 @@ public struct CardConfig: Codable, Equatable, Identifiable, Sendable {
 
     public var kind: Kind
     public var visible: Bool
-    /// The card's share of the row, relative to the other visible cards.
+    /// The card's share of the row among the visible cards, before minimum widths apply (`CardLayout.widths`).
     public var weight: Double
     public var id: Kind { kind }
 
@@ -375,9 +377,11 @@ public struct CardConfig: Codable, Equatable, Identifiable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = try c.decode(Kind.self, forKey: .kind)
         visible = c.lenient(.visible, true)
-        // Files from before drag-to-resize store a preset instead of a weight.
-        let older = try decoder.container(keyedBy: OlderKeys.self)
-        weight = c.lenient(.weight, older.lenient(.width, Width.regular).weight)
+        // Files from before drag-to-resize store a preset instead of a weight. A weight no drag could make (zero,
+        // negative, or so big the layout overflows to NaN, which can't be saved) falls back the same way.
+        let preset = try decoder.container(keyedBy: OlderKeys.self).lenient(.width, Width.regular).weight
+        let saved = c.lenient(.weight, preset)
+        weight = (0.01...100).contains(saved) ? saved : preset
     }
 }
 
