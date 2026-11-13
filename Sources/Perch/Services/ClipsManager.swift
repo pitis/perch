@@ -100,6 +100,12 @@ final class ClipsManager {
         saveSoon()
     }
 
+    /// Whether reading the clip's file could raise a macOS prompt, because it's in a protected folder Perch hasn't been
+    /// granted. Such files are only read when you use the clip.
+    func mayPrompt(_ clip: Clip) -> Bool {
+        clip.path.map { ProtectedFolders.mayPrompt($0, granted: watchedFolder) } ?? false
+    }
+
     /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
     /// protected folder are skipped unless it holds the screenshot folder Perch watches, because checking them
     /// could raise a macOS prompt, so their clips stay even after the file is gone.

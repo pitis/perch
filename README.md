@@ -74,7 +74,7 @@ macOS asks for each permission when you first use the feature that needs it:
 - **Calendar**, when you connect it, to show today's events. Perch only reads them.
 - **Reminders**, when you turn on Reminders sync.
 - **Microphone and Speech Recognition**, the first time you click the microphone. Speech becomes text on your Mac.
-- **The folder your screenshots go to**, usually the Desktop, only if you turn on screenshots in Clips. Clips also keeps track of files you copy, so copying one from Desktop, Documents or Downloads may make macOS ask about that folder too.
+- **The folder your screenshots go to**, usually the Desktop, only if you turn on screenshots in Clips. Clips also keeps track of files you copy, but it only reads one from Desktop, Documents or Downloads when you use its clip, and macOS may ask about that folder then.
 
 AI agents reach Perch through a local socket that only your user account can open.
 
