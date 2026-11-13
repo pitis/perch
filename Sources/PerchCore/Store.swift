@@ -42,10 +42,22 @@ public struct Store {
         if let data = decode(url) { return .loaded(data) }
 
         // Never let the next save overwrite a file we couldn't read.
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        let aside = url.deletingPathExtension().appendingPathExtension("corrupt-\(stamp).json")
+        let aside = stamped("corrupt")
         try? fm.moveItem(at: url, to: aside)
         return .recovered(decode(backup) ?? AppData(), corruptCopy: aside)
+    }
+
+    /// Writes `data` beside the store in the export format, so it can be restored like any backup. Returns the file.
+    public func keepCopy(_ data: AppData) throws -> URL {
+        let copy = stamped("before-restore")
+        try Store.encoder.encode(data).write(to: copy, options: .withoutOverwriting)
+        return copy
+    }
+
+    /// `store.<label>-<time>.json`, next to the store.
+    private func stamped(_ label: String) -> URL {
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        return url.deletingPathExtension().appendingPathExtension("\(label)-\(stamp).json")
     }
 
     private func decode(_ file: URL) -> AppData? {
@@ -62,5 +74,29 @@ public struct Store {
             try? fm.copyItem(at: url, to: backup)
         }
         try encoded.write(to: url, options: .atomic)
+    }
+}
+
+/// Folders macOS guards with a permission prompt that clips come from: Desktop, Documents, Downloads, iCloud Drive
+/// and other cloud folders, and everything under /Volumes. Touching anything inside one before the user has
+/// answered blocks until they do.
+public enum ProtectedFolders {
+    public static let all = [FileManager.SearchPathDirectory.desktopDirectory, .documentDirectory, .downloadsDirectory]
+        .map { FileManager.default.urls(for: $0, in: .userDomainMask)[0] }
+        + ["Mobile Documents", "CloudStorage"].map { FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent($0) }
+        + [URL(fileURLWithPath: "/Volumes")]
+
+    /// Whether touching `path` could raise that prompt. `granted` is a folder Perch already reads, such as the
+    /// screenshot folder it watches, and covers the whole protected folder it's in.
+    public static func mayPrompt(_ path: String, granted: URL?, protected: [URL] = all) -> Bool {
+        // The protected folder a path is in, lowercased because the default volume ignores case. Each volume counts
+        // as its own folder, since access to a USB drive doesn't cover a network share.
+        func area(_ path: String) -> String? {
+            let path = path.lowercased()
+            guard let folder = protected.map({ $0.path.lowercased() }).first(where: { path == $0 || path.hasPrefix($0 + "/") }) else { return nil }
+            return folder == "/volumes" ? path.split(separator: "/").prefix(2).joined(separator: "/") : folder
+        }
+        guard let folder = area(path) else { return false }
+        return granted.flatMap { area($0.path) } != folder
     }
 }

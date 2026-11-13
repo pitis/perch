@@ -11,8 +11,8 @@ private var utc: Calendar = {
 /// Saturday 7 Nov 2026, 10:00 local.
 private let saturday = Day.at("2026-11-07", hour: 10, minute: 0, calendar: utc)
 
-private func parse(_ text: String, at now: Date = saturday) -> ParsedTask {
-    NLParser.parse(text, now: now, calendar: utc)
+private func parse(_ text: String, at now: Date = saturday, locale: String = "en_US") -> ParsedTask {
+    NLParser.parse(text, now: now, calendar: utc, locale: Locale(identifier: locale))
 }
 
 private func clock(_ date: Date?) -> String {
@@ -91,6 +91,73 @@ final class NLParserTests: XCTestCase {
         XCTAssertEqual(parse("Plan trip p2").priority, .medium)
     }
 
+    func testNumericDatesFollowTheLocalesOrder() {
+        XCTAssertEqual(parse("x 12/25").day, "2026-12-25")
+        XCTAssertEqual(parse("x 12/25").title, "X")
+        XCTAssertEqual(parse("x 3/4").day, "2027-03-04", "already past this year")
+        XCTAssertEqual(parse("x 12/25/27").day, "2027-12-25")
+        XCTAssertEqual(parse("x 25/12", locale: "en_GB").day, "2026-12-25")
+        XCTAssertEqual(parse("x 3/4", locale: "en_GB").day, "2027-04-03")
+        XCTAssertEqual(parse("x 25.12.2026", locale: "ro_RO").day, "2026-12-25")
+        XCTAssertEqual(parse("x 25.12.", locale: "de_DE").title, "X")
+        XCTAssertEqual(parse("x 25/12 at 9:30", locale: "ro_RO").reminderAt.map(clock), "2026-12-25 09:30")
+        XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").deadline, "2026-11-30")
+        XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").title, "Pay rent")
+        XCTAssertEqual(parse("pay rent by 25.12", locale: "de_DE").deadline, "2026-12-25")
+        XCTAssertNil(parse("x 31/11", locale: "en_GB").day, "November has 30 days")
+        XCTAssertNil(parse("x february 30").day)
+        for (text, locale) in [("x 25/12", "en_US"), ("x 12.25", "en_US"), ("pay 10.50 to bob", "ro_RO"), ("update to 1.2.3", "de_DE"), ("room 12/40", "en_US"),
+                               ("update to macOS 26.1", "ro_RO"), ("buy 2.5 kg flour", "en_US@rg=atzzzz"), ("read chapter 3.2", "de_DE")] {
+            XCTAssertNil(parse(text, locale: locale).day, text)
+            XCTAssertEqual(parse(text, locale: locale).title.lowercased(), text.lowercased(), text)
+        }
+    }
+
+    func testRomanian() {
+        let call = parse("sună-o pe mama mâine la 5")
+        XCTAssertEqual(call.title, "Sună-o pe mama")
+        XCTAssertEqual(clock(call.reminderAt), "2026-11-08 17:00")
+        XCTAssertEqual(parse("plătește chiria până vineri").deadline, "2026-11-13")
+        XCTAssertEqual(parse("plătește chiria până vineri").title, "Plătește chiria")
+        let gym = parse("sală în fiecare luni și joi la 7 seara")
+        XCTAssertEqual(gym.title, "Sală")
+        XCTAssertEqual(gym.repeatRule?.weekdays, [2, 5])
+        XCTAssertEqual(clock(gym.reminderAt), "2026-11-09 19:00")
+        XCTAssertEqual(parse("raport poimâine").day, "2026-11-09")
+        let meeting = parse("întâlnire pe 3 decembrie la ora 14:30")
+        XCTAssertEqual(meeting.title, "Întâlnire")
+        XCTAssertEqual(clock(meeting.reminderAt), "2026-12-03 14:30")
+        XCTAssertEqual(clock(parse("verifică mailul în 30 de minute").reminderAt), "2026-11-07 10:30")
+        XCTAssertEqual(clock(parse("sună la service peste două ore").reminderAt), "2026-11-07 12:00")
+        XCTAssertEqual(parse("vacanță peste 3 luni").day, "2027-02-07")
+        XCTAssertEqual(clock(parse("film diseară").reminderAt), "2026-11-07 20:00")
+        XCTAssertEqual(parse("curățenie sâmbăta viitoare").day, "2026-11-14")
+        XCTAssertEqual(parse("x în fiecare zi").repeatRule, RepeatRule(kind: .daily))
+        XCTAssertEqual(parse("x azi").day, "2026-11-07")
+        XCTAssertEqual(parse("x pe 25.12", locale: "ro_RO").title, "X")
+        XCTAssertEqual(parse("factura până la 3 decembrie").deadline, "2026-12-03")
+        let plain = parse("suna-l pe Ion maine dimineata")
+        XCTAssertEqual(plain.title, "Suna-l pe Ion", "diacritics are optional")
+        XCTAssertEqual(clock(plain.reminderAt), "2026-11-08 09:00")
+        XCTAssertEqual(clock(parse("film la 7.30 seara").reminderAt), "2026-11-07 19:30")
+        for text in ["du-te la magazin", "cumpără lapte", "mai multe ouă", "lunar eclipse photos", "pune pe 2 farfurii", "bilete LA 2028",
+                     "plan pentru următoarele luni", "abonament pe două luni", "de luni de zile nu am sunat", "trimite email la 3 colegi",
+                     "rezervare la 7 persoane", "programează controlul anual", "sună la bancă luni și joi", "plătește factura până pe 25.12"] {
+            XCTAssertNil(parse(text).day, text)
+            XCTAssertEqual(parse(text).title.lowercased(), text.lowercased(), text)
+        }
+    }
+
+    func testEnglishNamesAreNotRomanian() {
+        for text in ["Drive to Maine", "email Joi about the deck"] {
+            XCTAssertNil(parse(text).day, text)
+            XCTAssertEqual(parse(text).title.lowercased(), text.lowercased(), text)
+        }
+        XCTAssertEqual(parse("lunch with Azi tomorrow").title, "Lunch with Azi")
+        XCTAssertEqual(parse("flight to LA 9:30").title, "Flight to LA")
+        XCTAssertEqual(parse("gym PE monday").title, "Gym PE")
+    }
+
     func testAllDetailsAndNoTitleKeepsSomethingToShow() {
         XCTAssertEqual(parse("tomorrow").title, "Tomorrow")
     }
@@ -109,6 +176,42 @@ final class RepeatTests: XCTestCase {
 }
 
 final class WorkspaceTests: XCTestCase {
+    func testAnotherReadingOfThePhraseSchedulesIt() {
+        let (w, _) = makeWorkspace()
+        let dentist = w.add("Zahnarzt am Dienstag um 14 Uhr", defaultDay: nil)!
+        XCTAssertNil(dentist.day, "the parser doesn't read German")
+        w.applySchedule(dentist.id, title: "zahnarzt", when: "tuesday at 2pm", ifUnchangedSince: dentist)
+        XCTAssertEqual(w.task(dentist.id)?.title, "Zahnarzt")
+        XCTAssertEqual(w.task(dentist.id)?.day, "2026-11-10")
+        XCTAssertEqual(clock(w.task(dentist.id)?.reminderAt), "2026-11-10 14:00")
+
+        let rent = w.add("Miete zahlen bis Freitag", defaultDay: w.today)!
+        w.applySchedule(rent.id, title: "Miete zahlen", when: "by friday", ifUnchangedSince: rent)
+        XCTAssertEqual(w.task(rent.id)?.deadline, "2026-11-13")
+        XCTAssertEqual(w.task(rent.id)?.day, w.today, "a deadline keeps the day it was added to")
+
+        let edited = w.add("Steuer machen am Montag", defaultDay: nil)!
+        w.update(edited.id) { $0.title = "Steuer" }
+        w.applySchedule(edited.id, title: "Steuer machen", when: "monday", ifUnchangedSince: edited)
+        XCTAssertNil(w.task(edited.id)?.day, "an edit made meanwhile wins")
+
+        let milk = w.add("Milch kaufen", defaultDay: nil)!
+        w.applySchedule(milk.id, title: "Milch", when: "", ifUnchangedSince: milk)
+        XCTAssertEqual(w.task(milk.id)?.title, "Milch kaufen", "nothing changes without a date")
+        w.applySchedule(milk.id, title: "Milch kaufen", when: "today", ifUnchangedSince: milk)
+        XCTAssertNil(w.task(milk.id)?.day, "a date that took no words from the text was made up")
+
+        let doctor = w.add("Arzt anrufen morgen um 14 Uhr", defaultDay: nil)!
+        w.applySchedule(doctor.id, title: "Call doctor", when: "tomorrow at 2pm", ifUnchangedSince: doctor)
+        XCTAssertEqual(w.task(doctor.id)?.title, "Arzt anrufen morgen um 14 Uhr", "a translation isn't the user's own words")
+        XCTAssertNil(w.task(doctor.id)?.day)
+
+        let jog = w.add("Joggen jeden Montag", defaultDay: nil)!
+        w.setCompleted(jog.id, true)
+        w.applySchedule(jog.id, title: "Joggen", when: "every monday", ifUnchangedSince: jog)
+        XCTAssertNil(w.task(jog.id)?.repeatRule, "a task finished meanwhile is left alone")
+    }
+
     func testCompletingARepeatCreatesTheNextAndUndoTakesItBack() {
         let (w, _) = makeWorkspace()
         let t = w.add("gym every day at 6pm", defaultDay: w.today)!
@@ -440,6 +543,119 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(back.tasks.first?.title, "good")
         XCTAssertEqual(String(decoding: try Data(contentsOf: aside), as: UTF8.self), "not json", "kept for inspection")
     }
+
+    func testRestoreKeepsACopyOfTheCurrentDataThenReplacesIt() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        old.add("restored", defaultDay: nil)
+        old.focusStart(minutes: 25)
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        XCTAssertEqual(w.data.tasks.map(\.title), ["Restored"])
+        XCTAssertEqual(w.data.focus.phase, .paused, "a timer running in the backup would count all the time since")
+        XCTAssertEqual(copy.deletingLastPathComponent(), url.deletingLastPathComponent())
+        XCTAssertNotEqual(copy, url)
+        XCTAssertEqual(try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy)), before)
+        guard case .loaded(let saved) = Store(url: url).load() else { return XCTFail("the restore is on disk before it's shown") }
+        XCTAssertEqual(saved.tasks.map(\.title), ["Restored"])
+    }
+
+    func testRestoreKeepsFocusTimeThatWasRunningAndDoesntRingOldReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (old, _) = makeWorkspace()
+        let call = old.add("call bob at 10:15", defaultDay: nil)!
+        let backup = try Store.decoder.decode(AppData.self, from: old.exportJSON())
+
+        let (w, advance) = makeWorkspace()
+        w.focusStart(minutes: 25)
+        advance(1200)
+        let copy = try w.restore(backup, keepingCopyIn: Store(url: url))
+        let kept = try Store.decoder.decode(AppData.self, from: Data(contentsOf: copy))
+        XCTAssertEqual(kept.focus.phase, .paused, "restoring the copy gives back the 20 minutes of focus")
+        XCTAssertEqual(kept.focus.accumulated, 1200)
+        XCTAssertEqual(w.task(call.id)?.title, "Call bob")
+        XCTAssertTrue(w.takeDueReminders().isEmpty, "a reminder that came due before the restore already rang")
+    }
+
+    func testARestoredBackupWinsOverReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        func linked(_ title: String, _ remoteId: String?) -> TaskItem {
+            var task = TaskItem(title: title, now: saturday.addingTimeInterval(-7200))
+            task.remoteId = remoteId
+            return task
+        }
+        var backup = AppData()
+        backup.tasks = [linked("Kept", "R1"), linked("Deleted since", "R2"), linked("Never synced", nil)]
+        backup.settings.remindersSync = false
+
+        let (w, _) = makeWorkspace()
+        w.data.tasks = [linked("Edited since", "R1"), linked("Added since", "R3")]
+        w.data.settings.remindersSync = true
+        w.data.settings.reminderListId = "L"
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "R1", title: "Edited since", modifiedAt: saturday.addingTimeInterval(-60)),
+                         RemoteReminder(id: "R3", title: "Added since")]
+        let ids = backup.tasks.map(\.id)
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes), [
+            .deleteRemote("R3"),
+            .pushRemote(ids[0], remoteId: "R1"),
+            .createRemote(ids[1]),
+            .createRemote(ids[2]),
+        ], "the backup's version is pushed, a deleted reminder is made again, and one added since goes")
+        XCTAssertTrue(w.data.settings.remindersSync, "sync is this Mac's setting, not the backup's")
+    }
+
+    func testARestoreKeepsTheRemindersOfTasksStillHere() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
+        var backup = AppData()
+        backup.tasks = [alpha] // saved before sync was turned on, so it has no link
+
+        let (w, _) = makeWorkspace()
+        var linked = alpha
+        linked.remoteId = "N1"
+        var beta = TaskItem(title: "Beta", now: saturday)
+        beta.remoteId = "N2"
+        w.data.tasks = [linked, beta]
+        w.data.settings.reminderListId = "L" // synced before, though sync is off right now
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "N1", title: "Alpha"), RemoteReminder(id: "N2", title: "Beta")]
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes),
+                       [.deleteRemote("N2")], "Alpha keeps its reminder rather than getting a new one")
+    }
+
+    func testRestoreChangesNothingIfTheCopyCantBeWritten() {
+        let (w, _) = makeWorkspace()
+        w.add("current", defaultDay: nil)
+        let before = w.data
+        var changes = 0
+        w.onChange = { changes += 1 }
+        var backup = AppData()
+        backup.tasks = [TaskItem(title: "restored")]
+        XCTAssertThrowsError(try w.restore(backup, keepingCopyIn: Store(url: tempURL()))) // its folder doesn't exist
+        XCTAssertEqual(w.data, before)
+        XCTAssertEqual(changes, 0, "no save, sync or wake is scheduled either")
+    }
+
+    func testFilesThatArentBackupsAreRejected() throws {
+        for raw in ["", "not json", "[]", "{}", #"{"tasks":"no"}"#, #"{"tasks":[{"title":"no id"}]}"#] {
+            XCTAssertThrowsError(try Store.decoder.decode(AppData.self, from: Data(raw.utf8)), raw) { error in
+                XCTAssertTrue(error is DecodingError, "the Settings message relies on it: \(raw)")
+            }
+        }
+        XCTAssertNoThrow(try Store.decoder.decode(AppData.self, from: Workspace().exportJSON()))
+    }
 }
 
 final class AgentConfigTests: XCTestCase {
@@ -627,5 +843,52 @@ final class CardLayoutTests: XCTestCase {
         XCTAssertEqual(bad.weight, CardConfig.Width.wide.weight, "a weight that can't lay out falls back to the preset")
         let huge = try JSONDecoder().decode(CardConfig.self, from: Data(#"{"kind":"tasks","visible":true,"weight":1e308}"#.utf8))
         XCTAssertEqual(huge.weight, CardConfig.Width.regular.weight, "it would overflow to NaN, which can't be saved")
+    }
+}
+
+final class ProtectedFoldersTests: XCTestCase {
+    private let folders = ["/Users/me/Desktop", "/Users/me/Documents", "/Volumes"].map { URL(fileURLWithPath: $0) }
+
+    private func mayPrompt(_ path: String, granted: String? = nil) -> Bool {
+        ProtectedFolders.mayPrompt(path, granted: granted.map { URL(fileURLWithPath: $0) }, protected: folders)
+    }
+
+    func testFilesInsideProtectedFoldersMayPrompt() {
+        XCTAssertTrue(mayPrompt("/Users/me/Documents/report.pdf"))
+        XCTAssertTrue(mayPrompt("/Users/me/Desktop/a/b.png"))
+        XCTAssertTrue(mayPrompt("/Volumes/USB/photo.jpg"))
+    }
+
+    func testOtherFilesDoNot() {
+        XCTAssertFalse(mayPrompt("/Users/me/Pictures/cat.png"))
+        XCTAssertFalse(mayPrompt("/Users/me/Documents Old/notes.txt"), "a sibling with the same prefix isn't inside")
+        XCTAssertFalse(mayPrompt("/Users/me/Library/Application Support/Perch/Clips/x.png"))
+    }
+
+    func testAGrantedFolderCoversItsWholeProtectedFolder() {
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Desktop"))
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Desktop/Screenshots"))
+        XCTAssertTrue(mayPrompt("/Users/me/Documents/report.pdf", granted: "/Users/me/Desktop"))
+        XCTAssertTrue(mayPrompt("/Users/me/Desktop/shot.png", granted: "/Users/me/Pictures"))
+    }
+
+    func testMatchingIgnoresCase() {
+        XCTAssertTrue(mayPrompt("/Users/me/desktop/shot.png"), "the default volume opens this as the Desktop")
+        XCTAssertFalse(mayPrompt("/Users/me/Desktop/shot.png", granted: "/users/me/desktop"))
+    }
+
+    func testAGrantedVolumeCoversOnlyItself() {
+        XCTAssertFalse(mayPrompt("/Volumes/USB/shot.png", granted: "/Volumes/USB/Shots"))
+        XCTAssertTrue(mayPrompt("/Volumes/NAS/report.pdf", granted: "/Volumes/USB/Shots"))
+    }
+
+    func testDefaultsAreTheUsersFolders() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let paths = ["Desktop", "Documents", "Downloads", "Library/Mobile Documents/com~apple~CloudDocs", "Library/CloudStorage/Dropbox"]
+            .map { "\(home)/\($0)/file" } + ["/Volumes/USB/file"]
+        for path in paths {
+            XCTAssertTrue(ProtectedFolders.mayPrompt(path, granted: nil), path)
+        }
+        XCTAssertFalse(ProtectedFolders.mayPrompt("\(home)/Pictures/file", granted: nil))
     }
 }

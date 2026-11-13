@@ -15,7 +15,8 @@ struct Clip: Codable, Identifiable, Equatable {
     var ownsFile = false
     var copiedAt: Date?
 
-    var url: URL? { path.map { URL(fileURLWithPath: $0) } }
+    // `isDirectory:` keeps this from checking the disk, which can block on a prompt for a protected folder.
+    var url: URL? { path.map { URL(fileURLWithPath: $0, isDirectory: false) } }
     var title: String { url?.lastPathComponent ?? String((text ?? "").prefix(60)) }
 }
 
@@ -60,7 +61,8 @@ final class ClipsManager {
 
     private func load() {
         guard let raw = try? Data(contentsOf: indexFile), let saved = try? Store.decoder.decode([Clip].self, from: raw) else { return }
-        clips = saved.filter { $0.url.map { FileManager.default.fileExists(atPath: $0.path) } ?? true }
+        clips = saved
+        pruneMissing()
     }
 
     func save() {
@@ -98,12 +100,20 @@ final class ClipsManager {
         saveSoon()
     }
 
-    /// Clears out clips whose files were deleted or moved since they were added.
+    /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
+    /// protected folder are skipped unless it holds the screenshot folder Perch watches, because checking them
+    /// could raise a macOS prompt, so their clips stay even after the file is gone.
     func pruneMissing() {
-        let alive = clips.filter { $0.url.map { FileManager.default.fileExists(atPath: $0.path) } ?? true }
-        if alive.count != clips.count {
-            clips = alive
-            saveSoon()
+        let paths = clips.compactMap(\.path).filter { !ProtectedFolders.mayPrompt($0, granted: watchedFolder) }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // Only a file that's really gone, not one Perch was refused access to.
+            let missing = Set(paths.filter { Darwin.access($0, F_OK) != 0 && errno == ENOENT })
+            guard !missing.isEmpty else { return }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.clips.removeAll { $0.path.map(missing.contains) ?? false }
+                self.saveSoon()
+            }
         }
     }
 
@@ -155,6 +165,7 @@ final class ClipsManager {
     func updateScreenshotWatcher() {
         watcher?.cancel()
         watcher = nil
+        watchedFolder = nil
         guard workspace?.data.settings.captureScreenshots == true else { return }
 
         // The first touch of the Desktop folder shows a macOS permission prompt and blocks until it's answered,
@@ -177,6 +188,7 @@ final class ClipsManager {
                 source.setCancelHandler { close(fd) }
                 source.resume()
                 self.watcher = source
+                self.pruneMissing()
             }
         }
     }
@@ -213,13 +225,21 @@ final class ClipsManager {
         }
     }
 
+    /// What macOS calls a new recording ("Bildschirmaufnahme", "Înregistrare ecran"), since recordings often lack the attribute.
+    /// Read from the screenshot tool's own strings, in the language it picks from the user's list; English stays as a fallback.
+    private static let recordingNames: [String] = {
+        let url = URL(fileURLWithPath: "/System/Library/CoreServices/screencaptureui.app/Contents/Resources/Localizable.loctable")
+        let table = NSDictionary(contentsOf: url) as? [String: Any] ?? [:]
+        let languages = Bundle.preferredLocalizations(from: Array(table.keys), forPreferences: Locale.preferredLanguages)
+        return ["Screen Recording"] + languages.compactMap { (table[$0] as? [String: Any])?["Screen Recording"] as? String }
+    }()
+
     static func captureKind(of url: URL) -> Clip.Kind? {
         let ext = url.pathExtension.lowercased()
         // macOS marks screenshots with this attribute in every language, which beats matching file names.
         let marked = getxattr(url.path, "com.apple.metadata:kMDItemIsScreenCapture", nil, 0, 0, 0) > 0
         if ["mov", "mp4"].contains(ext) {
-            // shortcut: recordings are matched by their default English name when the attribute is missing.
-            return marked || url.lastPathComponent.hasPrefix("Screen Recording") ? .recording : nil
+            return marked || recordingNames.contains(where: url.lastPathComponent.hasPrefix) ? .recording : nil
         }
         if ["png", "jpg", "jpeg", "heic", "tiff", "pdf"].contains(ext) {
             return marked ? .screenshot : nil

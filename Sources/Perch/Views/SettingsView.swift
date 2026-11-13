@@ -8,7 +8,7 @@ struct SettingsView: View {
     @Environment(AppHub.self) private var hub
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
-    @State private var exportMessage: String?
+    @State private var backupMessage: String?
 
     var body: some View {
         @Bindable var ws = hub.workspace
@@ -92,21 +92,24 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Suggest a priority and project", isOn: $ws.data.settings.autoClassify)
+                Toggle("Fill in priority, project and dates", isOn: $ws.data.settings.autoClassify)
                     .disabled(!AutoClassifier.isAvailable)
             } header: {
                 Text("Apple Intelligence")
             } footer: {
                 Text(AutoClassifier.isAvailable
-                    ? "New tasks get a priority and project from Apple's on-device model. Anything you set yourself is left alone."
+                    ? "New tasks get a priority and project from Apple's on-device model. When a task's date is in a language Perch doesn't read itself, such as German or Japanese, the model fills it in and takes those words out of the title. Anything you set yourself is left alone."
                     : "Needs macOS 26 with Apple Intelligence turned on.")
             }
 
             Section("Your data") {
                 LabeledContent("Backup") {
-                    Button("Export JSON…", action: exportBackup).controlSize(.small)
+                    HStack {
+                        Button("Export JSON…", action: exportBackup).controlSize(.small)
+                        Button("Restore…", action: restoreBackup).controlSize(.small)
+                    }
                 }
-                if let exportMessage { Text(exportMessage).font(.caption).foregroundStyle(.secondary) }
+                if let backupMessage { Text(backupMessage).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 Button("Allow notifications while Perch is closed…") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
                         NSWorkspace.shared.open(url)
@@ -141,9 +144,47 @@ struct SettingsView: View {
             guard response == .OK, let url = panel.url else { return }
             do {
                 try hub.workspace.exportJSON().write(to: url, options: .atomic)
-                exportMessage = "Saved to \(url.lastPathComponent)."
+                backupMessage = "Saved to \(url.lastPathComponent)."
             } catch {
-                exportMessage = "Couldn't save: \(error.localizedDescription)"
+                backupMessage = "Couldn't save: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func restoreBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let name = url.lastPathComponent
+            let backup: AppData
+            do {
+                backup = try Store.decoder.decode(AppData.self, from: Data(contentsOf: url))
+            } catch is DecodingError {
+                backupMessage = "Perch can't read \(name) as a backup. Nothing was changed."
+                return
+            } catch {
+                backupMessage = "Couldn't open \(name). Nothing was changed. \(error.localizedDescription)"
+                return
+            }
+
+            let alert = NSAlert()
+            alert.messageText = "Replace your Perch data with this backup?"
+            let now = hub.workspace.data
+            alert.informativeText = """
+                \(name) has \(backup.tasks.count) tasks and notes on \(backup.notes.count) days. You have \(now.tasks.count) tasks and notes on \(now.notes.count) days now.
+
+                Your tasks, notes, focus history and settings will be replaced. Clips, Launch at login and Reminders sync aren't affected. If you sync with Reminders, the Perch list there is changed to match the backup. A copy of your current data is saved first.
+                """
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            do {
+                let copy = try hub.restoreBackup(backup)
+                backupMessage = "Restored \(name). Your previous data is in \((copy.path as NSString).abbreviatingWithTildeInPath)."
+            } catch {
+                backupMessage = "Couldn't restore \(name), so nothing was changed. \(error.localizedDescription)"
             }
         }
     }

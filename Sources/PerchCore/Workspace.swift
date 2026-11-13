@@ -64,6 +64,44 @@ public final class Workspace {
         return task
     }
 
+    /// Applies a second reading of a task's title, for languages the parser doesn't read: Apple's on-device model
+    /// rewrites its date in English ("tuesday at 2pm") and gives the title without it. Nothing changes when `when` holds
+    /// no date, when `title` isn't the task's own words with some taken out (a translation, or a date made up from none),
+    /// or when the task was finished, or its title or dates edited, since it was added.
+    public func applySchedule(_ id: UUID, title: String, when: String, ifUnchangedSince added: TaskItem) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Read as of the add, in POSIX: the model writes month names, so the Mac's own numeric order mustn't apply.
+        let parsed = NLParser.parse("x " + when, now: added.createdAt, calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
+        guard parsed.day != nil || parsed.reminderAt != nil || parsed.deadline != nil || parsed.repeatRule != nil,
+              Self.isShortened(title, from: added.title),
+              let current = task(id), !current.isCompleted, current.title == added.title, current.day == added.day,
+              current.reminderAt == added.reminderAt, current.deadline == added.deadline, current.repeatRule == added.repeatRule
+        else { return }
+        let order = parsed.day.flatMap { $0 == current.day ? nil : nextOrder(in: $0) }
+        update(id) { task in
+            task.title = title.prefix(1).uppercased() + title.dropFirst()
+            if let day = parsed.day { task.day = day }
+            if let order { task.order = order }
+            task.reminderAt = parsed.reminderAt
+            task.deadline = parsed.deadline
+            task.repeatRule = parsed.repeatRule
+        }
+    }
+
+    /// Whether `title` is `original` with some of its words taken out and the rest kept in order.
+    private static func isShortened(_ title: String, from original: String) -> Bool {
+        func words(_ text: String) -> [String] {
+            text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
+        let kept = words(title), all = words(original)
+        var rest = all[...]
+        for word in kept {
+            guard let i = rest.firstIndex(of: word) else { return false }
+            rest = rest[(i + 1)...]
+        }
+        return !kept.isEmpty && kept.count < all.count
+    }
+
     private func nextOrder(in day: String?) -> Double {
         (open(on: day).map(\.order).max() ?? 0) + 1
     }
@@ -380,5 +418,42 @@ public final class Workspace {
 
     public func exportJSON() throws -> Data {
         try Store.encoder.encode(data)
+    }
+
+    /// Replaces all data with a backup and saves it, after keeping a copy of the current data beside `store`, and returns
+    /// where the copy is. If the copy or the save fails, nothing changes.
+    public func restore(_ backup: AppData, keepingCopyIn store: Store) throws -> URL {
+        var current = data
+        if current.focus.phase == .running { // as quitting does, so restoring the copy gives the running time back
+            closeSegment(&current.focus)
+            current.focus.phase = .paused
+        }
+        let copy = try store.keepCopy(current)
+        var next = backup
+        if next.focus.phase == .running { // it would count all the time since the backup was made
+            next.focus.runningSince = nil
+            next.focus.phase = .paused
+        }
+        for i in next.tasks.indices where next.tasks[i].reminderAt.map({ $0 <= now }) == true {
+            next.tasks[i].reminderFiredAt = now // reminders that came due before now aren't rung again
+        }
+        // Syncing with Reminders is this Mac's setting. Once this Mac has synced, the backup wins over the Perch list
+        // there, even with sync off for now: its tasks count as the newest edit and keep the reminder they have here,
+        // ones whose reminder is gone are made again, and ones added since go.
+        next.settings.remindersSync = current.settings.remindersSync
+        next.settings.reminderListId = current.settings.reminderListId
+        if current.settings.reminderListId != nil {
+            let links = Dictionary(current.tasks.compactMap { task in task.remoteId.map { (task.id, $0) } }, uniquingKeysWith: { first, _ in first })
+            let inReminders = Set(links.values).union(current.pendingRemoteDeletes)
+            for i in next.tasks.indices {
+                next.tasks[i].modifiedAt = now
+                if let link = links[next.tasks[i].id] { next.tasks[i].remoteId = link }
+                if let id = next.tasks[i].remoteId, !inReminders.contains(id) { next.tasks[i].remoteId = nil }
+            }
+            next.pendingRemoteDeletes = inReminders.subtracting(next.tasks.compactMap(\.remoteId)).sorted()
+        }
+        try store.save(next)
+        data = next
+        return copy
     }
 }
