@@ -76,13 +76,14 @@ struct CustomizePage: View {
                 set: { ws.data.settings.cards[index].visible = $0 }
             ))
             .toggleStyle(.checkbox).font(.system(size: 12)).frame(width: 90, alignment: .leading)
+            // A width set by dragging matches no preset, so no segment shows as selected.
             Picker("", selection: Binding(
-                get: { ws.data.settings.cards[index].width },
-                set: { ws.data.settings.cards[index].width = $0 }
+                get: { ws.data.settings.cards[index].weight },
+                set: { ws.data.settings.cards[index].weight = $0 }
             )) {
-                Text("S").tag(CardConfig.Width.narrow)
-                Text("M").tag(CardConfig.Width.regular)
-                Text("L").tag(CardConfig.Width.wide)
+                Text("S").tag(CardConfig.Width.narrow.weight)
+                Text("M").tag(CardConfig.Width.regular.weight)
+                Text("L").tag(CardConfig.Width.wide.weight)
             }
             .labelsHidden().pickerStyle(.segmented).frame(width: 96).controlSize(.small)
             Spacer()

@@ -800,6 +800,52 @@ final class MCPTests: XCTestCase {
     }
 }
 
+final class CardLayoutTests: XCTestCase {
+    func testWidthsFollowWeights() {
+        XCTAssertEqual(CardLayout.widths([2, 1, 1], minimums: [0, 0, 0], in: 400), [200, 100, 100])
+    }
+
+    func testWidthsNeverGoBelowAMinimum() {
+        let widths = CardLayout.widths([0.1, 1, 1], minimums: [150, 0, 0], in: 450)
+        XCTAssertEqual(widths, [150, 150, 150])
+    }
+
+    func testResizeTradesWidthBetweenTheTwoNeighboursOnly() {
+        let weights = CardLayout.resize([2, 1, 1], at: 0, by: -100, minimums: [0, 0, 0], in: 400)
+        XCTAssertEqual(weights, [1, 2, 1])
+    }
+
+    func testResizeStopsAtEitherNeighboursMinimum() {
+        let left = CardLayout.resize([1, 1], at: 0, by: -500, minimums: [150, 150], in: 400)
+        XCTAssertEqual(CardLayout.widths(left, minimums: [150, 150], in: 400), [150, 250])
+        let right = CardLayout.resize([1, 1], at: 0, by: 500, minimums: [150, 150], in: 400)
+        XCTAssertEqual(CardLayout.widths(right, minimums: [150, 150], in: 400), [250, 150])
+    }
+
+    func testResizeMovesOnlyTheGapEvenWhenACardIsAtItsMinimum() {
+        let minimums: [Double] = [270, 150, 140, 140]
+        func widths(_ weights: [Double]) -> [Double] { CardLayout.widths(weights, minimums: minimums, in: 804).map { ($0 * 1000).rounded() / 1000 } }
+        let tasksSmall: [Double] = [0.85, 1.9, 1, 1] // Tasks S and the others M sit at their minimums
+        XCTAssertEqual(widths(tasksSmall), [270, 254, 140, 140])
+        XCTAssertEqual(widths(CardLayout.resize(tasksSmall, at: 0, by: 110, minimums: minimums, in: 804)), [374, 150, 140, 140])
+        XCTAssertEqual(widths(CardLayout.resize(tasksSmall, at: 0, by: 0, minimums: minimums, in: 804)), [270, 254, 140, 140], "a click moves nothing")
+    }
+
+    func testCustomWidthPersistsAndOlderPresetsStillLoad() throws {
+        var card = CardConfig(kind: .notes)
+        card.weight = 1.37
+        let back = try JSONDecoder().decode(CardConfig.self, from: JSONEncoder().encode(card))
+        XCTAssertEqual(back.weight, 1.37)
+        let old = try JSONDecoder().decode(CardConfig.self, from: Data(#"{"kind":"tasks","visible":false,"width":"wide"}"#.utf8))
+        XCTAssertEqual(old.weight, CardConfig.Width.wide.weight)
+        XCTAssertFalse(old.visible)
+        let bad = try JSONDecoder().decode(CardConfig.self, from: Data(#"{"kind":"tasks","visible":true,"weight":-3,"width":"wide"}"#.utf8))
+        XCTAssertEqual(bad.weight, CardConfig.Width.wide.weight, "a weight that can't lay out falls back to the preset")
+        let huge = try JSONDecoder().decode(CardConfig.self, from: Data(#"{"kind":"tasks","visible":true,"weight":1e308}"#.utf8))
+        XCTAssertEqual(huge.weight, CardConfig.Width.regular.weight, "it would overflow to NaN, which can't be saved")
+    }
+}
+
 final class ProtectedFoldersTests: XCTestCase {
     private let folders = ["/Users/me/Desktop", "/Users/me/Documents", "/Volumes"].map { URL(fileURLWithPath: $0) }
 
