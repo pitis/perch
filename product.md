@@ -128,13 +128,18 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Launch at login
 - JSON backup export
 
+**Beyond English** ([#18](https://github.com/pitis/perch/issues/18))
+- Numeric dates such as 12/25 or 25.12, in the Mac's date order (unit-tested)
+- Detecting screen recordings by the name macOS gives them in your language
+- Romanian task phrases, with or without diacritics: "sună-o pe mama mâine la 5", "chiria până vineri" (unit-tested)
+- Dates in any other language Apple's on-device model reads (German, French, Spanish, Japanese…), filled in just after adding, with Apple Intelligence on
+
 ## Not done: not built yet
 
 - First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
 - Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Resizing cards by dragging ([#16](https://github.com/pitis/perch/issues/16))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
-- Languages other than English, numeric dates such as 12/25, and detecting recordings without their English file name ([#18](https://github.com/pitis/perch/issues/18))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
 - Restoring from a JSON backup, which goes beyond the reference product ([#20](https://github.com/pitis/perch/issues/20))
 
