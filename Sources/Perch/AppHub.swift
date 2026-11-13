@@ -1,4 +1,5 @@
 import AppKit
+import NaturalLanguage
 import Observation
 import PerchCore
 import UniformTypeIdentifiers
@@ -224,23 +225,25 @@ final class AppHub {
 
     // MARK: Actions
 
-    /// Adds a task, then lets the on-device model fill in what the text left out (see `classify`).
+    /// Adds a task, then lets the on-device model fill in what the parser couldn't get from the text (see `classify`).
     @discardableResult
     func addTask(_ text: String, day: String?) -> TaskItem? {
         guard let task = workspace.add(text, defaultDay: day) else { return nil }
-        classify(task, from: text, defaultDay: day)
+        classify(task, defaultDay: day)
         return task
     }
 
-    /// On Apple Intelligence Macs, a new task without a priority or project gets them from the on-device model, and one
-    /// without a date gets the date its text gives in a language the parser doesn't read, such as German or Japanese.
-    func classify(_ task: TaskItem, from text: String, defaultDay: String?) {
+    /// On Apple Intelligence Macs, a new task without a priority or project gets them from the on-device model. One in a
+    /// language the parser doesn't read, such as German or Japanese, and with no date the parser found, also gets the
+    /// model's reading of its date, with those words taken out of the title (see `Workspace.applySchedule`).
+    func classify(_ task: TaskItem, defaultDay: String?) {
         let suggest = task.priority == .none || task.project == nil
-        let undated = task.day == defaultDay && task.reminderAt == nil && task.deadline == nil && task.repeatRule == nil
+        let foreign = ![NLLanguage.english, .romanian].contains(NLLanguageRecognizer.dominantLanguage(for: task.title))
+        let undated = foreign && task.day == defaultDay && task.reminderAt == nil && task.deadline == nil && task.repeatRule == nil
         guard workspace.data.settings.autoClassify, suggest || undated, AutoClassifier.isAvailable else { return }
         let projects = workspace.projects
         Task { @MainActor [workspace] in
-            guard let guess = await AutoClassifier.classify(text, projects: projects) else { return }
+            guard let guess = await AutoClassifier.classify(task.title, projects: projects) else { return }
             workspace.update(task.id) { current in
                 if current.priority == .none, let priority = guess.priority { current.priority = priority }
                 if current.project == nil, let project = guess.project { current.project = project }

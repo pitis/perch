@@ -103,7 +103,11 @@ final class NLParserTests: XCTestCase {
         XCTAssertEqual(parse("x 25/12 at 9:30", locale: "ro_RO").reminderAt.map(clock), "2026-12-25 09:30")
         XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").deadline, "2026-11-30")
         XCTAssertEqual(parse("pay rent by 30/11", locale: "en_GB").title, "Pay rent")
-        for (text, locale) in [("x 25/12", "en_US"), ("x 12.25", "en_US"), ("pay 10.50 to bob", "ro_RO"), ("update to 1.2.3", "de_DE"), ("room 12/40", "en_US")] {
+        XCTAssertEqual(parse("pay rent by 25.12", locale: "de_DE").deadline, "2026-12-25")
+        XCTAssertNil(parse("x 31/11", locale: "en_GB").day, "November has 30 days")
+        XCTAssertNil(parse("x february 30").day)
+        for (text, locale) in [("x 25/12", "en_US"), ("x 12.25", "en_US"), ("pay 10.50 to bob", "ro_RO"), ("update to 1.2.3", "de_DE"), ("room 12/40", "en_US"),
+                               ("update to macOS 26.1", "ro_RO"), ("buy 2.5 kg flour", "en_US@rg=atzzzz"), ("read chapter 3.2", "de_DE")] {
             XCTAssertNil(parse(text, locale: locale).day, text)
             XCTAssertEqual(parse(text, locale: locale).title.lowercased(), text.lowercased(), text)
         }
@@ -135,10 +139,23 @@ final class NLParserTests: XCTestCase {
         let plain = parse("suna-l pe Ion maine dimineata")
         XCTAssertEqual(plain.title, "Suna-l pe Ion", "diacritics are optional")
         XCTAssertEqual(clock(plain.reminderAt), "2026-11-08 09:00")
-        for text in ["du-te la magazin", "cumpără lapte", "mai multe ouă", "lunar eclipse photos", "pune pe 2 farfurii", "bilete LA 2028"] {
+        XCTAssertEqual(clock(parse("film la 7.30 seara").reminderAt), "2026-11-07 19:30")
+        for text in ["du-te la magazin", "cumpără lapte", "mai multe ouă", "lunar eclipse photos", "pune pe 2 farfurii", "bilete LA 2028",
+                     "plan pentru următoarele luni", "abonament pe două luni", "de luni de zile nu am sunat", "trimite email la 3 colegi",
+                     "rezervare la 7 persoane", "programează controlul anual", "sună la bancă luni și joi", "plătește factura până pe 25.12"] {
             XCTAssertNil(parse(text).day, text)
             XCTAssertEqual(parse(text).title.lowercased(), text.lowercased(), text)
         }
+    }
+
+    func testEnglishNamesAreNotRomanian() {
+        for text in ["Drive to Maine", "email Joi about the deck"] {
+            XCTAssertNil(parse(text).day, text)
+            XCTAssertEqual(parse(text).title.lowercased(), text.lowercased(), text)
+        }
+        XCTAssertEqual(parse("lunch with Azi tomorrow").title, "Lunch with Azi")
+        XCTAssertEqual(parse("flight to LA 9:30").title, "Flight to LA")
+        XCTAssertEqual(parse("gym PE monday").title, "Gym PE")
     }
 
     func testAllDetailsAndNoTitleKeepsSomethingToShow() {
@@ -163,7 +180,7 @@ final class WorkspaceTests: XCTestCase {
         let (w, _) = makeWorkspace()
         let dentist = w.add("Zahnarzt am Dienstag um 14 Uhr", defaultDay: nil)!
         XCTAssertNil(dentist.day, "the parser doesn't read German")
-        w.applySchedule(dentist.id, title: "Zahnarzt", when: "tuesday at 2pm", ifUnchangedSince: dentist)
+        w.applySchedule(dentist.id, title: "zahnarzt", when: "tuesday at 2pm", ifUnchangedSince: dentist)
         XCTAssertEqual(w.task(dentist.id)?.title, "Zahnarzt")
         XCTAssertEqual(w.task(dentist.id)?.day, "2026-11-10")
         XCTAssertEqual(clock(w.task(dentist.id)?.reminderAt), "2026-11-10 14:00")
@@ -183,6 +200,16 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(w.task(milk.id)?.title, "Milch kaufen", "nothing changes without a date")
         w.applySchedule(milk.id, title: "Milch kaufen", when: "today", ifUnchangedSince: milk)
         XCTAssertNil(w.task(milk.id)?.day, "a date that took no words from the text was made up")
+
+        let doctor = w.add("Arzt anrufen morgen um 14 Uhr", defaultDay: nil)!
+        w.applySchedule(doctor.id, title: "Call doctor", when: "tomorrow at 2pm", ifUnchangedSince: doctor)
+        XCTAssertEqual(w.task(doctor.id)?.title, "Arzt anrufen morgen um 14 Uhr", "a translation isn't the user's own words")
+        XCTAssertNil(w.task(doctor.id)?.day)
+
+        let jog = w.add("Joggen jeden Montag", defaultDay: nil)!
+        w.setCompleted(jog.id, true)
+        w.applySchedule(jog.id, title: "Joggen", when: "every monday", ifUnchangedSince: jog)
+        XCTAssertNil(w.task(jog.id)?.repeatRule, "a task finished meanwhile is left alone")
     }
 
     func testCompletingARepeatCreatesTheNextAndUndoTakesItBack() {

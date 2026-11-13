@@ -300,7 +300,7 @@ struct NotesCard: View {
             Text(Day.format(day, "d MMM yyyy", calendar: hub.workspace.calendar)).font(.system(size: 10)).foregroundStyle(theme.ink2)
             Rectangle().fill(theme.wash).frame(height: 1)
             NoteEditor(text: binding, ink: theme.bw ? .white : NSColor(red: 0.105, green: 0.118, blue: 0.102, alpha: 1)) { line in
-                hub.workspace.taskFromNoteLine(line, day: day).map { hub.classify($0, from: line, defaultDay: day); return true } ?? false
+                hub.workspace.taskFromNoteLine(line, day: day).map { hub.classify($0, defaultDay: day); return true } ?? false
             }
             HStack(spacing: 5) {
                 Image(systemName: "text.alignleft").font(.system(size: 10))

@@ -64,27 +64,42 @@ public final class Workspace {
         return task
     }
 
-    /// Applies a second reading of the text a task was added from, for languages the parser doesn't read: Apple's on-device
-    /// model rewrites its date in English ("tuesday at 2pm") and gives the title without it. Nothing changes when `when`
-    /// holds no date, when the title didn't get shorter (so the date wasn't in the text), or when the task's title or dates
-    /// were edited since it was added.
+    /// Applies a second reading of a task's title, for languages the parser doesn't read: Apple's on-device model
+    /// rewrites its date in English ("tuesday at 2pm") and gives the title without it. Nothing changes when `when` holds
+    /// no date, when `title` isn't the task's own words with some taken out (a translation, or a date made up from none),
+    /// or when the task was finished, or its title or dates edited, since it was added.
     public func applySchedule(_ id: UUID, title: String, when: String, ifUnchangedSince added: TaskItem) {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parsed = NLParser.parse("x " + when, now: now, calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
+        // Read as of the add, in POSIX: the model writes month names, so the Mac's own numeric order mustn't apply.
+        let parsed = NLParser.parse("x " + when, now: added.createdAt, calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
         guard parsed.day != nil || parsed.reminderAt != nil || parsed.deadline != nil || parsed.repeatRule != nil,
-              !title.isEmpty, title.count < added.title.count,
-              let current = task(id), current.title == added.title, current.day == added.day, current.reminderAt == added.reminderAt,
-              current.deadline == added.deadline, current.repeatRule == added.repeatRule
+              Self.isShortened(title, from: added.title),
+              let current = task(id), !current.isCompleted, current.title == added.title, current.day == added.day,
+              current.reminderAt == added.reminderAt, current.deadline == added.deadline, current.repeatRule == added.repeatRule
         else { return }
         let order = parsed.day.flatMap { $0 == current.day ? nil : nextOrder(in: $0) }
         update(id) { task in
-            task.title = title
+            task.title = title.prefix(1).uppercased() + title.dropFirst()
             if let day = parsed.day { task.day = day }
             if let order { task.order = order }
             task.reminderAt = parsed.reminderAt
             task.deadline = parsed.deadline
             task.repeatRule = parsed.repeatRule
         }
+    }
+
+    /// Whether `title` is `original` with some of its words taken out and the rest kept in order.
+    private static func isShortened(_ title: String, from original: String) -> Bool {
+        func words(_ text: String) -> [String] {
+            text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
+        let kept = words(title), all = words(original)
+        var rest = all[...]
+        for word in kept {
+            guard let i = rest.firstIndex(of: word) else { return false }
+            rest = rest[(i + 1)...]
+        }
+        return !kept.isEmpty && kept.count < all.count
     }
 
     private func nextOrder(in day: String?) -> Double {

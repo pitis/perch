@@ -98,7 +98,7 @@ struct SettingsView: View {
                 Text("Apple Intelligence")
             } footer: {
                 Text(AutoClassifier.isAvailable
-                    ? "New tasks get a priority and project from Apple's on-device model, and their date when it's written in a language other than English or Romanian. Anything you set yourself is left alone."
+                    ? "New tasks get a priority and project from Apple's on-device model. When a task's date is in a language Perch doesn't read itself, such as German or Japanese, the model fills it in and takes those words out of the title. Anything you set yourself is left alone."
                     : "Needs macOS 26 with Apple Intelligence turned on.")
             }
 

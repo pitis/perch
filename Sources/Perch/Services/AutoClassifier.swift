@@ -21,8 +21,9 @@ private struct TaskGuess {
 }
 #endif
 
-/// A priority, a project and a date in English for new tasks, from Apple's on-device model on macOS 26 with Apple Intelligence on.
-/// The model reads any language it supports. Everywhere else it does nothing, and tasks simply stay unclassified.
+/// A priority, a project, and the title split into its to-do and an English date phrase for `NLParser`, from Apple's
+/// on-device model on macOS 26 with Apple Intelligence on. The model reads any language it supports. Everywhere else,
+/// or when the model fails, `classify` returns nil and tasks simply stay as they were added.
 enum AutoClassifier {
     struct Guess {
         var priority: Priority?
@@ -51,6 +52,7 @@ enum AutoClassifier {
                 let priority = Priority(name: guess.priority)
                 return Guess(priority: priority == .some(.none) ? nil : priority, project: project.isEmpty ? nil : project, title: guess.title, when: guess.when)
             } catch {
+                NSLog("Perch: Apple Intelligence couldn't read a task: %@", "\(error)")
                 return nil
             }
         }
