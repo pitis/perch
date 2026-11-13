@@ -122,6 +122,7 @@ final class AppHub {
         }
 
         clips.start(workspace: workspace)
+        clips.onGone = { [weak self] clip in self?.show(Toast(text: "“\(clip.title)” was moved or deleted, so its clip is gone.")) }
         calendar.start(workspace: workspace)
         sync.start()
         handleWake()
