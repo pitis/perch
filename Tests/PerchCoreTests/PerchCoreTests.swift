@@ -599,6 +599,7 @@ final class StoreTests: XCTestCase {
         let (w, _) = makeWorkspace()
         w.data.tasks = [linked("Edited since", "R1"), linked("Added since", "R3")]
         w.data.settings.remindersSync = true
+        w.data.settings.reminderListId = "L"
         _ = try w.restore(backup, keepingCopyIn: Store(url: url))
 
         let reminders = [RemoteReminder(id: "R1", title: "Edited since", modifiedAt: saturday.addingTimeInterval(-60)),
@@ -611,6 +612,27 @@ final class StoreTests: XCTestCase {
             .createRemote(ids[2]),
         ], "the backup's version is pushed, a deleted reminder is made again, and one added since goes")
         XCTAssertTrue(w.data.settings.remindersSync, "sync is this Mac's setting, not the backup's")
+    }
+
+    func testARestoreKeepsTheRemindersOfTasksStillHere() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
+        var backup = AppData()
+        backup.tasks = [alpha] // saved before sync was turned on, so it has no link
+
+        let (w, _) = makeWorkspace()
+        var linked = alpha
+        linked.remoteId = "N1"
+        var beta = TaskItem(title: "Beta", now: saturday)
+        beta.remoteId = "N2"
+        w.data.tasks = [linked, beta]
+        w.data.settings.reminderListId = "L" // synced before, though sync is off right now
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "N1", title: "Alpha"), RemoteReminder(id: "N2", title: "Beta")]
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes),
+                       [.deleteRemote("N2")], "Alpha keeps its reminder rather than getting a new one")
     }
 
     func testRestoreChangesNothingIfTheCopyCantBeWritten() {

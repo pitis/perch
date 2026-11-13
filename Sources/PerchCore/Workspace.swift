@@ -437,14 +437,17 @@ public final class Workspace {
         for i in next.tasks.indices where next.tasks[i].reminderAt.map({ $0 <= now }) == true {
             next.tasks[i].reminderFiredAt = now // reminders that came due before now aren't rung again
         }
-        // Syncing with Reminders is this Mac's setting. While it's on, the backup wins over the Perch list there:
-        // its tasks count as the newest edit, ones whose reminder is gone are made again, and ones added since go.
+        // Syncing with Reminders is this Mac's setting. Once this Mac has synced, the backup wins over the Perch list
+        // there, even with sync off for now: its tasks count as the newest edit and keep the reminder they have here,
+        // ones whose reminder is gone are made again, and ones added since go.
         next.settings.remindersSync = current.settings.remindersSync
         next.settings.reminderListId = current.settings.reminderListId
-        if current.settings.remindersSync {
-            let inReminders = Set(current.tasks.compactMap(\.remoteId)).union(current.pendingRemoteDeletes)
+        if current.settings.reminderListId != nil {
+            let links = Dictionary(current.tasks.compactMap { task in task.remoteId.map { (task.id, $0) } }, uniquingKeysWith: { first, _ in first })
+            let inReminders = Set(links.values).union(current.pendingRemoteDeletes)
             for i in next.tasks.indices {
                 next.tasks[i].modifiedAt = now
+                if let link = links[next.tasks[i].id] { next.tasks[i].remoteId = link }
                 if let id = next.tasks[i].remoteId, !inReminders.contains(id) { next.tasks[i].remoteId = nil }
             }
             next.pendingRemoteDeletes = inReminders.subtracting(next.tasks.compactMap(\.remoteId)).sorted()
