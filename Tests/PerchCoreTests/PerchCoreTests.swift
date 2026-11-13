@@ -584,6 +584,35 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(w.takeDueReminders().isEmpty, "a reminder that came due before the restore already rang")
     }
 
+    func testARestoredBackupWinsOverReminders() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        func linked(_ title: String, _ remoteId: String?) -> TaskItem {
+            var task = TaskItem(title: title, now: saturday.addingTimeInterval(-7200))
+            task.remoteId = remoteId
+            return task
+        }
+        var backup = AppData()
+        backup.tasks = [linked("Kept", "R1"), linked("Deleted since", "R2"), linked("Never synced", nil)]
+        backup.settings.remindersSync = false
+
+        let (w, _) = makeWorkspace()
+        w.data.tasks = [linked("Edited since", "R1"), linked("Added since", "R3")]
+        w.data.settings.remindersSync = true
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+
+        let reminders = [RemoteReminder(id: "R1", title: "Edited since", modifiedAt: saturday.addingTimeInterval(-60)),
+                         RemoteReminder(id: "R3", title: "Added since")]
+        let ids = backup.tasks.map(\.id)
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes), [
+            .deleteRemote("R3"),
+            .pushRemote(ids[0], remoteId: "R1"),
+            .createRemote(ids[1]),
+            .createRemote(ids[2]),
+        ], "the backup's version is pushed, a deleted reminder is made again, and one added since goes")
+        XCTAssertTrue(w.data.settings.remindersSync, "sync is this Mac's setting, not the backup's")
+    }
+
     func testRestoreChangesNothingIfTheCopyCantBeWritten() {
         let (w, _) = makeWorkspace()
         w.add("current", defaultDay: nil)

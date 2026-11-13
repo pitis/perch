@@ -174,7 +174,7 @@ struct SettingsView: View {
             alert.informativeText = """
                 \(name) has \(backup.tasks.count) tasks and notes on \(backup.notes.count) days. You have \(now.tasks.count) tasks and notes on \(now.notes.count) days now.
 
-                Your tasks, notes, focus history and settings will be replaced. Clips and Launch at login aren't affected. A copy of your current data is saved first.
+                Your tasks, notes, focus history and settings will be replaced. Clips, Launch at login and Reminders sync aren't affected. With sync on, the Perch list in Reminders is changed to match the backup. A copy of your current data is saved first.
                 """
             alert.addButton(withTitle: "Replace")
             alert.addButton(withTitle: "Cancel")
