@@ -293,7 +293,8 @@ final class ClipsManager {
 
     func open(_ clip: Clip) {
         if let url = clip.url {
-            NSWorkspace.shared.open(url)
+            // Off the main thread: opening may be the first touch of a protected folder, which can wait on a prompt.
+            DispatchQueue.global(qos: .userInitiated).async { NSWorkspace.shared.open(url) }
         } else if let text = clip.text {
             // Plain text has no file to open, so it goes to the default text editor through a temporary one.
             let file = FileManager.default.temporaryDirectory.appendingPathComponent("Perch clip \(clip.id.uuidString.prefix(6)).txt")

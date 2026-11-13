@@ -140,7 +140,7 @@ private struct ClipCard: View {
         } else {
             VStack(spacing: 4) {
                 // The icon for the file's type, which macOS knows from the name alone, without reading the file.
-                Image(nsImage: NSWorkspace.shared.icon(for: clip.url.flatMap { UTType(filenameExtension: $0.pathExtension) } ?? .data))
+                Image(nsImage: NSWorkspace.shared.icon(for: clip.url.flatMap { UTType(tag: $0.pathExtension, tagClass: .filenameExtension, conformingTo: nil) } ?? .data))
                     .resizable().frame(width: 48, height: 48)
                 Text(clip.title).font(.system(size: 11)).lineLimit(2).multilineTextAlignment(.center)
             }
@@ -158,7 +158,7 @@ private struct ClipCard: View {
     private func loadThumbnail() async {
         // A file in a protected folder Perch hasn't been granted keeps its type icon: reading it could raise a prompt.
         guard thumbnail == nil, let url = clip.url, !hub.clips.mayPrompt(clip) else { return }
-        // Off the main thread, so a slow or missing file can't freeze the panel.
+        // Off the main thread, so a slow volume or a protected place the list misses can't freeze the panel.
         let size = Self.size
         let image = await Task.detached {
             let request = QLThumbnailGenerator.Request(fileAt: url, size: size, scale: 2, representationTypes: .all)
