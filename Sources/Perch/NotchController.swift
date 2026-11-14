@@ -224,6 +224,7 @@ final class NotchController {
         closeWork = nil
         stickyKeyboard = false
         ui.editingTask = nil
+        ui.pickingDay = nil
         ui.wantsComposerFocus = false
         if panel.isKeyWindow {
             panel.makeFirstResponder(nil)
@@ -284,7 +285,9 @@ final class NotchController {
         })
         add(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.keyCode == UInt16(kVK_Escape), self.ui.mode == .open, event.window === self.panel else { return event }
-            if self.ui.editingTask != nil {
+            if self.ui.pickingDay != nil {
+                self.ui.pickingDay = nil
+            } else if self.ui.editingTask != nil {
                 self.ui.editingTask = nil
             } else {
                 self.close()
@@ -353,7 +356,7 @@ final class NotchController {
     }
 
     private var mayAutoClose: Bool {
-        guard !stickyKeyboard, ui.editingTask == nil, ui.draggingTask == nil, ui.draggingCard == nil,
+        guard !stickyKeyboard, ui.editingTask == nil, ui.pickingDay == nil, ui.draggingTask == nil, ui.draggingCard == nil,
               hub.speech.activeOwner == nil, NSEvent.pressedMouseButtons == 0,
               RunLoop.current.currentMode != .eventTracking else { return false }
         // Don't vanish mid-sentence just because the pointer moved.

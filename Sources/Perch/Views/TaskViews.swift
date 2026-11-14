@@ -44,8 +44,11 @@ struct TasksCard: View {
                         HStack {
                             Text("Carry unfinished work forward").font(.system(size: 11)).foregroundStyle(theme.ink2)
                             Spacer()
-                            Button("Move all to today", action: ws.carryOverdueToToday)
-                                .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
+                            Group {
+                                Button("Move all to today") { ws.carryOverdue(to: ws.today) }
+                                Button("Pick a date…") { hub.ui.pickingDay = .overdue }
+                            }
+                            .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
                         }
                         .padding(.vertical, 4)
                         ForEach(overdue) { TaskRow(task: $0, showsDay: true) }
@@ -296,6 +299,7 @@ struct TaskRow: View {
                 Button("Tomorrow") { hub.workspace.move(task.id, to: Day.adding(1, to: hub.workspace.today, calendar: hub.workspace.calendar)) }
                 Button("Next week") { hub.workspace.move(task.id, to: Day.adding(7, to: hub.workspace.today, calendar: hub.workspace.calendar)) }
                 Button("Inbox") { hub.workspace.move(task.id, to: nil) }
+                Button("Pick a date…") { hub.ui.pickingDay = .task(task.id) }
                 Divider()
                 Button("Rename") { beginRename() }
                 Button("Delete", role: .destructive) { hub.deleteTask(task.id) }
@@ -615,6 +619,71 @@ struct TaskEditor: View {
             Text(label).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).frame(width: 56, alignment: .leading)
             content()
         }
+    }
+}
+
+// MARK: Date picker
+
+/// Picks any day for the shown day, one task or everything overdue.
+struct DayPicker: View {
+    @Environment(AppHub.self) private var hub
+    let pick: DayPick
+    @State private var draft: Date?
+
+    var body: some View {
+        let ws = hub.workspace
+        let cal = ws.calendar
+        let today = Day.date(ws.today, calendar: cal)
+        let start: Date = switch pick {
+        case .shownDay: Day.date(hub.ui.selectedDay, calendar: cal)
+        case .task(let id): Day.date(ws.task(id)?.day ?? ws.today, calendar: cal)
+        case .overdue: today
+        }
+        ZStack {
+            Color.black.opacity(0.45)
+                .contentShape(Rectangle())
+                .onTapGesture { hub.ui.pickingDay = nil }
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
+                // Moving overdue work into the past would leave it overdue.
+                DatePicker("", selection: Binding(get: { draft ?? start }, set: { draft = $0 }),
+                           in: (pick == .overdue ? today : .distantPast)..., displayedComponents: .date)
+                    .labelsHidden().datePickerStyle(.graphical)
+                HStack(spacing: 14) {
+                    Button("Cancel") { hub.ui.pickingDay = nil }.foregroundStyle(.white.opacity(0.6))
+                    Spacer()
+                    if pick == .shownDay {
+                        Button("Today") { choose(today) }
+                    }
+                    Button(pick == .shownDay ? "Go" : "Move") { choose(draft ?? start) }.foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain).font(.system(size: 12, weight: .semibold))
+            }
+            .padding(14)
+            .fixedSize()
+            .foregroundStyle(.white)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var title: String {
+        switch pick {
+        case .shownDay: "Go to a day"
+        case .task(let id): "Move “\(hub.workspace.task(id)?.title ?? "")” to"
+        case .overdue: "Move all overdue tasks to"
+        }
+    }
+
+    private func choose(_ date: Date) {
+        let ws = hub.workspace
+        let day = Day.key(date, calendar: ws.calendar)
+        switch pick {
+        case .shownDay: hub.ui.selectedDay = day
+        case .task(let id): ws.move(id, to: day)
+        case .overdue: ws.carryOverdue(to: day)
+        }
+        hub.ui.pickingDay = nil
     }
 }
 

@@ -1,6 +1,6 @@
 # Perch: what's done and what isn't
 
-Last updated: 8 November 2026
+Last updated: 14 November 2026
 
 The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) and [changelog](https://www.notchowl.com/changelog).
 
@@ -60,6 +60,10 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Priority, repeats and deadlines in typed text (unit-tested)
 - Repeating tasks creating their next occurrence (unit-tested)
 - Week view: Inbox beside the next 14 days, dragging between them, and adding from a column
+
+**Picking any date** ([#15](https://github.com/pitis/perch/issues/15))
+- The date on the tasks card opens a calendar to go to any day, with Today to jump back
+- Pick a date… in a task's menu, and on Overdue to move everything at once (unit-tested)
 
 **Notepad** ([#3](https://github.com/pitis/perch/issues/3))
 - Typing and autosave
@@ -142,7 +146,6 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 ## Not done: not built yet
 
 - First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
-- Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
 

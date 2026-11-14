@@ -24,6 +24,10 @@ enum Snapshot {
         render(hub, name: "editor", folder: folder)
         hub.ui.editingTask = nil
 
+        hub.ui.pickingDay = .task(hub.workspace.open(on: hub.workspace.today)[1].id)
+        render(hub, name: "pick-date", folder: folder)
+        hub.ui.pickingDay = nil
+
         hub.ui.mode = .activity
         hub.ui.activity = hub.workspace.data.tasks.first { $0.reminderAt != nil }
         render(hub, name: "activity", folder: folder, size: CGSize(width: 480, height: 170))

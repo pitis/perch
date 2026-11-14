@@ -192,8 +192,9 @@ public final class Workspace {
     }
 
     /// Carries every overdue task forward to today.
-    public func carryOverdueToToday() {
-        for task in overdue { move(task.id, to: today) }
+    /// Moves every overdue task to `day`, oldest first, after the tasks already there.
+    public func carryOverdue(to day: String) {
+        for task in overdue { move(task.id, to: day) }
     }
 
     public func delete(_ id: UUID) {

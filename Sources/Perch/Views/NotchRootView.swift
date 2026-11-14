@@ -272,6 +272,9 @@ struct PageContent: View {
                 TaskEditor(id: id)
             }
         }
+        .overlay {
+            if let pick = hub.ui.pickingDay { DayPicker(pick: pick) }
+        }
         .overlay(alignment: .bottom) {
             if let toast = hub.ui.toast {
                 HStack(spacing: 10) {
