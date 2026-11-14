@@ -908,3 +908,24 @@ final class ProtectedFoldersTests: XCTestCase {
         XCTAssertFalse(ProtectedFolders.mayPrompt("\(home)/Pictures/file", granted: nil))
     }
 }
+
+final class ListSelectionTests: XCTestCase {
+    func testArrowsStartAtTheNearEndAndStopAtTheEnds() {
+        let ids = ["a", "b", "c"]
+        XCTAssertEqual(ListSelection.move(nil, by: 1, in: ids), "a", "Down with nothing selected picks the first")
+        XCTAssertEqual(ListSelection.move(nil, by: -1, in: ids), "c", "Up with nothing selected picks the last")
+        XCTAssertEqual(ListSelection.move("a", by: 1, in: ids), "b")
+        XCTAssertEqual(ListSelection.move("c", by: 1, in: ids), "c")
+        XCTAssertEqual(ListSelection.move("a", by: -1, in: ids), "a")
+        XCTAssertEqual(ListSelection.move("gone", by: 1, in: ids), "a", "a selection that left the list starts over")
+        XCTAssertNil(ListSelection.move("a", by: 1, in: [String]()))
+    }
+
+    func testRemovingTheSelectionSelectsTheNextOneOrElseThePrevious() {
+        let ids = ["a", "b", "c"]
+        XCTAssertEqual(ListSelection.afterRemoving("a", from: ids), "b")
+        XCTAssertEqual(ListSelection.afterRemoving("c", from: ids), "b")
+        XCTAssertNil(ListSelection.afterRemoving("a", from: ["a"]))
+        XCTAssertNil(ListSelection.afterRemoving("gone", from: ids))
+    }
+}

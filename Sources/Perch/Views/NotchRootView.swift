@@ -101,31 +101,41 @@ struct NotchRootView: View {
     private var compact: some View {
         if ui.greeting {
             wings(left: AnyView(DotText(text: "WELCOME", pitch: 1.7, maxWidth: Self.wing - 12)),
-                  right: AnyView(DotText(text: "BACK", pitch: 1.7, maxWidth: Self.wing - 12)))
+                  right: AnyView(DotText(text: "BACK", pitch: 1.7, maxWidth: Self.wing - 12)), spoken: "Welcome back")
         } else if focus.isActive {
             switch focus.phase {
             case .running:
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let now = context.date
                     wings(left: AnyView(ProgressRing(progress: focus.progress(at: now), isStopwatch: focus.mode == .stopwatch)),
-                          right: AnyView(DotText(text: FocusTimer.clock(focus.display(at: now)), pitch: 1.9, maxWidth: Self.wing - 12)))
+                          right: AnyView(DotText(text: FocusTimer.clock(focus.display(at: now)), pitch: 1.9, maxWidth: Self.wing - 12)),
+                          spoken: "Focus timer, \(Self.spoken(focus.display(at: now)))")
                 }
             case .paused:
                 wings(left: AnyView(DotText(text: FocusTimer.clock(focus.display(at: Date())), pitch: 1.9, maxWidth: Self.wing - 12, color: .white.opacity(0.5))),
-                      right: AnyView(DotText(text: "PAUSED", pitch: 1.7, maxWidth: Self.wing - 12)))
+                      right: AnyView(DotText(text: "PAUSED", pitch: 1.7, maxWidth: Self.wing - 12)),
+                      spoken: "Focus timer paused, \(Self.spoken(focus.display(at: Date())))")
             default:
                 wings(left: AnyView(ProgressRing(progress: 1, isStopwatch: false)),
-                      right: AnyView(DotText(text: "DONE", pitch: 1.9, maxWidth: Self.wing - 12, color: Theme.accent)))
+                      right: AnyView(DotText(text: "DONE", pitch: 1.9, maxWidth: Self.wing - 12, color: Theme.accent)),
+                      spoken: "Focus timer done")
             }
         }
     }
 
-    private func wings(left: AnyView, right: AnyView) -> some View {
+    private func wings(left: AnyView, right: AnyView, spoken: String) -> some View {
         HStack(spacing: 0) {
             left.frame(width: Self.wing)
             Spacer(minLength: ui.geometry.style == .edge ? 8 : ui.geometry.notchWidth)
             right.frame(width: Self.wing)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
+    }
+
+    /// "24 minutes, 13 seconds" for VoiceOver, rounded up like `FocusTimer.clock`.
+    static func spoken(_ seconds: TimeInterval) -> String {
+        Duration.seconds(Int(seconds.rounded(.up))).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide))
     }
 }
 
@@ -215,6 +225,7 @@ struct PageHeader: View {
                         .background(page == .clips ? Color.white : Color.white.opacity(0.1), in: Capsule())
                 }
                 .buttonStyle(.plain)
+                .pageShortcut(.clips, current: page)
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity)
@@ -235,6 +246,7 @@ struct PageHeader: View {
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .pageShortcut(tab, current: page)
                     }
                 }
                 .padding(2)
@@ -248,6 +260,19 @@ struct PageHeader: View {
             .padding(.trailing, 4)
         }
         .frame(height: headerHeight)
+    }
+}
+
+extension Page {
+    /// Command-1 to Command-4 for the tabs in order, then Command-5 for Clips.
+    var shortcut: Character { Character(String((Page.tabs.firstIndex(of: self) ?? Page.tabs.count) + 1)) }
+}
+
+private extension View {
+    func pageShortcut(_ page: Page, current: Page) -> some View {
+        keyboardShortcut(KeyEquivalent(page.shortcut), modifiers: .command)
+            .help("\(page.rawValue) (⌘\(String(page.shortcut)))")
+            .accessibilityAddTraits(page == current ? .isSelected : [])
     }
 }
 

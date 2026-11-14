@@ -1,6 +1,6 @@
 # Perch: what's done and what isn't
 
-Last updated: 8 November 2026
+Last updated: 14 November 2026
 
 The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) and [changelog](https://www.notchowl.com/changelog).
 
@@ -139,12 +139,18 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Romanian task phrases, with or without diacritics: "sună-o pe mama mâine la 5", "chiria până vineri" (unit-tested)
 - Dates in any other language Apple's on-device model reads (German, French, Spanish, Japanese…), filled in just after adding, with Apple Intelligence on
 
+**Keyboard and VoiceOver** ([#19](https://github.com/pitis/perch/issues/19))
+- In a task list, Up and Down select a task, Space completes or reopens it and Delete deletes it with Undo. Shift-Tab from the composer reaches the list (selection moves are unit-tested)
+- Command-1 to Command-4 switch between Workspace, Week, Insights and Customize, and Command-5 opens Clips
+- With Keyboard navigation turned on in System Settings, Tab reaches every button and each clip: Space copies a clip, Return opens it and Delete removes it
+- VoiceOver reads each task with its reminder, deadline, priority and project, with Mark done and Delete as actions; the timer as time remaining; each chart bar as its day and count; and each clip with Open and Remove as actions
+- Secondary text and placeholders are at least 4.5:1 against every card colour (checked by calculation, WCAG AA)
+
 ## Not done: not built yet
 
 - First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
 - Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
-- Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
 
 ## Left out on purpose
 

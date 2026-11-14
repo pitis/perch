@@ -131,10 +131,17 @@ struct FocusCard: View {
             if showingSetTime {
                 setTime(focus)
             } else {
-                ClockFace(text: focus.phase == .idle && focus.mode == .stopwatch ? "00:00" : FocusTimer.clock(displaySeconds(focus, now: now)),
-                          style: settings.clockStyle, color: theme.ink)
-                Text(caption(focus)).font(.system(size: 11)).foregroundStyle(theme.ink2)
-                progress(focus, now: now)
+                let seconds = focus.phase == .idle && focus.mode == .stopwatch ? 0 : displaySeconds(focus, now: now)
+                VStack(spacing: 6) {
+                    ClockFace(text: FocusTimer.clock(seconds), style: settings.clockStyle, color: theme.ink)
+                    Text(caption(focus)).font(.system(size: 11)).foregroundStyle(theme.ink2)
+                    progress(focus, now: now)
+                }
+                // "Remaining, 24 minutes 13 seconds" rather than the digits one by one.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(caption(focus))
+                .accessibilityValue(NotchRootView.spoken(seconds))
+                .accessibilityAddTraits(.updatesFrequently)
             }
             Spacer(minLength: 0)
             controls(focus)
@@ -183,6 +190,8 @@ struct FocusCard: View {
         .menuIndicator(.hidden)
         .fixedSize(horizontal: false, vertical: true)
         .help("Choose a task to focus on")
+        .accessibilityLabel("Task to focus on")
+        .accessibilityValue(current ?? "No task")
     }
 
     private func setTime(_ focus: FocusTimer) -> some View {
@@ -203,7 +212,7 @@ struct FocusCard: View {
                 }
             }
             HStack(spacing: 4) {
-                TextField("", text: $customMinutes, prompt: Text("Minutes").foregroundColor(theme.ink3))
+                TextField("", text: $customMinutes, prompt: Text("Minutes").foregroundColor(theme.ink2))
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .padding(.horizontal, 6).padding(.vertical, 4)
@@ -226,6 +235,7 @@ struct FocusCard: View {
                 }
                 .buttonStyle(.plain)
                 .help("Stopwatch: no time limit")
+                .accessibilityLabel("Stopwatch")
             }
         }
     }
@@ -248,6 +258,7 @@ struct FocusCard: View {
                 }
                 .buttonStyle(.plain)
                 .help(focus.taskId == nil ? "Finish" : "Finish and complete the task")
+                .accessibilityLabel(focus.taskId == nil ? "Finish" : "Finish and complete the task")
             }
             HStack(spacing: 6) {
                 if focus.phase == .idle {
@@ -277,6 +288,7 @@ struct FocusCard: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .accessibilityLabel("Timer options")
             }
         }
     }
@@ -471,6 +483,7 @@ struct EventsCard: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
+                    .accessibilityLabel("Calendar options")
                 }
             }
             if hub.calendar.isConnected {
@@ -545,6 +558,7 @@ private struct EventRowView: View {
             }
             .buttonStyle(.plain)
             .help("Tick off here. Your calendar isn't changed.")
+            .accessibilityLabel(checked ? "Untick \(event.title)" : "Tick off \(event.title)")
         }
         .opacity(checked ? 0.55 : 1)
         .padding(8)

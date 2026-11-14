@@ -27,8 +27,13 @@ struct Theme {
 
     private var inkBase: Color { bw ? .white : Color(hex: 0x1B1E1A) }
     var ink: Color { inkBase.opacity(bw ? 0.92 : 1) }
-    var ink2: Color { inkBase.opacity(bw ? 0.6 : 0.66) }
-    var ink3: Color { inkBase.opacity(bw ? 0.36 : 0.42) }
+    /// Secondary text. The cards are mid-tones, so anything lighter falls below 4.5:1 (WCAG AA for small text) on the
+    /// lavender card and the washes on it.
+    var ink2: Color { inkBase.opacity(bw ? 0.6 : 0.86) }
+    /// Lines, handles and chart bars, at 3:1 or better on every card. Too light for text.
+    var ink3: Color { inkBase.opacity(bw ? 0.36 : 0.6) }
+    /// Overdue dates, above 4.5:1 on the Tasks card and on the dark cards.
+    var alert: Color { bw ? Color(hex: 0xFF8A7A) : Color(hex: 0x7A1B0D) }
     var wash: Color { inkBase.opacity(bw ? 0.1 : 0.09) }
     var washStrong: Color { inkBase.opacity(bw ? 0.18 : 0.16) }
     var scheme: ColorScheme { bw ? .dark : .light }
