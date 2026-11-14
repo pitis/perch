@@ -5,8 +5,9 @@ import PerchCore
 
 /// Applies the decisions from `Reconciler` to Apple Reminders. iCloud carries the list to iPhone and Apple Watch.
 ///
-/// shortcut: repeats stay on the Perch side. Each occurrence is its own reminder with no recurrence rule, and a rule
-/// added to an item in the Reminders app is ignored. Upgrade if you want to create repeating tasks from iPhone.
+/// Repeats live on the Perch side: each occurrence is its own reminder with no recurrence rule. A rule added in the
+/// Reminders app becomes the task's repeat and comes off the reminder. One Perch can't express stays there, and the
+/// task's own repeat is dropped, so nothing comes twice.
 @Observable
 final class RemindersSync {
     private static let listName = "Perch"
@@ -133,7 +134,7 @@ final class RemindersSync {
         let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote,
                                       pendingDeletes: workspace.data.pendingRemoteDeletes, calendar: workspace.calendar)
         var created: [(UUID, EKReminder)] = []
-        var removedRemote: [String] = []
+        var finishedDeletes: [String] = []
         do {
             for action in actions {
                 switch action {
@@ -151,8 +152,14 @@ final class RemindersSync {
                 case .deleteRemote(let remoteId):
                     guard let reminder = byId[remoteId] else { continue }
                     try store.remove(reminder, commit: false)
-                    removedRemote.append(remoteId)
-                case .pullLocal, .importLocal, .deleteLocal, .unlink:
+                    finishedDeletes.append(remoteId)
+                case .dropPendingDelete(let remoteId):
+                    finishedDeletes.append(remoteId) // cleared with the deletes, so only once the commit succeeds
+                case .stripRecurrence(let remoteId):
+                    guard let reminder = byId[remoteId] else { continue }
+                    reminder.recurrenceRules = nil
+                    try store.save(reminder, commit: false)
+                case .pullLocal, .importLocal, .deleteLocal, .unlink, .adoptRepeat:
                     break
                 }
             }
@@ -165,7 +172,7 @@ final class RemindersSync {
         }
 
         for (id, reminder) in created { workspace.setRemoteId(identifier(of: reminder), for: id) }
-        workspace.clearPendingRemoteDeletes(removedRemote)
+        workspace.clearPendingRemoteDeletes(finishedDeletes)
 
         for action in actions {
             switch action {
@@ -173,7 +180,8 @@ final class RemindersSync {
             case .importLocal(let item): workspace.importRemote(item)
             case .deleteLocal(let id): workspace.deleteFromRemote(id)
             case .unlink(let id): workspace.setRemoteId(nil, for: id)
-            case .createRemote, .pushRemote, .deleteRemote: break
+            case .adoptRepeat(let id, let rule): workspace.setRemoteRepeat(rule, for: id)
+            case .createRemote, .pushRemote, .deleteRemote, .dropPendingDelete, .stripRecurrence: break
             }
         }
         lastSync = Date()
@@ -201,7 +209,25 @@ final class RemindersSync {
         default: priority = .none
         }
         return RemoteReminder(id: identifier(of: reminder), title: reminder.title ?? "", notes: notes, deadline: deadline, due: due,
-                              priority: priority, completed: reminder.isCompleted, modifiedAt: reminder.lastModifiedDate ?? .distantPast)
+                              priority: priority, completed: reminder.isCompleted, recurrence: recurrence(of: reminder),
+                              modifiedAt: reminder.lastModifiedDate ?? .distantPast)
+    }
+
+    private func recurrence(of reminder: EKReminder) -> RemoteRecurrence? {
+        guard let rules = reminder.recurrenceRules, let rule = rules.first else { return nil }
+        let frequency: RemoteRecurrence.Frequency
+        switch rule.frequency {
+        case .daily: frequency = .daily
+        case .weekly: frequency = .weekly
+        case .monthly: frequency = .monthly
+        case .yearly: frequency = .yearly
+        @unknown default: return RemoteRecurrence(frequency: .daily, interval: 1, unsupported: true)
+        }
+        let days = rule.daysOfTheWeek ?? []
+        let pinned = [rule.daysOfTheMonth, rule.daysOfTheYear, rule.weeksOfTheYear, rule.monthsOfTheYear, rule.setPositions]
+            .contains { !($0?.isEmpty ?? true) }
+        return RemoteRecurrence(frequency: frequency, interval: rule.interval, weekdays: days.map { $0.dayOfTheWeek.rawValue },
+                                unsupported: rules.count > 1 || rule.recurrenceEnd != nil || pinned || days.contains { $0.weekNumber != 0 })
     }
 
     private func write(_ task: TaskItem, to reminder: EKReminder) {

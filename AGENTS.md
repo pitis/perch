@@ -43,7 +43,7 @@ make dmg                                    # dist/Perch-<version>.dmg, from a c
 
 - **Spec:** feature parity with NotchOwl, using only its public site and [changelog](https://www.notchowl.com/changelog). Never download or inspect its app, and never use its name, logo or assets.
 - **Left out on purpose:** licensing and activation, the update button, usage analytics, the bug report button.
-- **Reminders sync:** the most recent edit wins. Each repeat occurrence is its own reminder with no recurrence rule. Deadlines travel as a `Deadline: yyyy-MM-dd` last line in the notes. Many items vanishing at once unlinks tasks rather than deleting them.
+- **Reminders sync:** the most recent edit wins. Each repeat occurrence is its own reminder with no recurrence rule: a repeat set in the Reminders app becomes the task's repeat and comes off the reminder, and one Perch can't express stays in Reminders and clears the task's repeat here, even one set later in Perch. Deadlines travel as a `Deadline: yyyy-MM-dd` last line in the notes. Many items vanishing at once unlinks tasks rather than deleting them.
 - **Signing:** the Apple Development certificate, because a stable signature keeps macOS permissions across rebuilds. No hardened runtime. Releases are signed the same way and not notarized, which needs a paid Developer ID, so a downloaded copy opens the first time through Open Anyway.
 
 ## Testing on the real Mac
@@ -54,6 +54,7 @@ The user runs this app for real, so testing must not interrupt them or touch the
 - **Don't change the user's clipboard, or print its contents.** `pbcopy` loses images and formatting even if you restore it.
 - **Keep live test data away from the real store** by setting `CFFIXED_USER_HOME` to a short path such as `.build/e2e`. The socket is `<home>/Library/Application Support/Perch/mcp.sock`, and macOS allows 103 bytes, so the fake home must resolve to an absolute path of at most 60. Otherwise the app logs it and turns MCP off. From a worktree, `.build/e2e` is already too long, so use `/tmp/perch-<n>` there.
 - **`./scripts/build.sh --install` replaces the copy the user runs every day.** Only run it from `main`, or after asking.
+- **A fake home is a first launch,** so Perch opens its setup window, which takes focus. Unless you're testing setup itself, first write `{"tasks":[]}` to `<home>/Library/Application Support/Perch/store.json` (`StoreTests` checks that it loads).
 - **That fake home changes what you're testing.** It also redirects the Desktop, and launching from a shell attributes permissions to the parent process, so prompts behave differently. Only `open` matches a real launch.
 - **Ask before** turning on Reminders sync or clicking Connect for an AI client. Those write to real Reminders and to `~/.claude.json`.
 

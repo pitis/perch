@@ -146,7 +146,7 @@ public final class Workspace {
         data.tasks = tasks
     }
 
-    private func nextInstance(of task: TaskItem, rule: RepeatRule) -> TaskItem {
+    func nextInstance(of task: TaskItem, rule: RepeatRule) -> TaskItem {
         let nextDay = rule.next(from: task.day ?? today, today: today, calendar: calendar)
         var next = task
         next.id = UUID()
@@ -191,9 +191,9 @@ public final class Workspace {
         data.tasks[i] = task
     }
 
-    /// Carries every overdue task forward to today.
-    public func carryOverdueToToday() {
-        for task in overdue { move(task.id, to: today) }
+    /// Moves every overdue task to `day`, earliest day first and keeping each day's order, after the tasks already there.
+    public func carryOverdue(to day: String) {
+        for task in overdue { move(task.id, to: day) }
     }
 
     public func delete(_ id: UUID) {
@@ -215,7 +215,7 @@ public final class Workspace {
             if let pending = next.pendingRemoteDeletes.firstIndex(of: remote) {
                 next.pendingRemoteDeletes.remove(at: pending)
             } else {
-                // A sync already removed it from Reminders, so it has to be created again.
+                // A sync already removed it from Reminders, or found it gone, so it has to be created again.
                 task.remoteId = nil
             }
         }

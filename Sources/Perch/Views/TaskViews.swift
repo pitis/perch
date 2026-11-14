@@ -44,11 +44,14 @@ struct TasksCard: View {
                     case .todo, .completed:
                         ForEach(shown) { TaskRow(task: $0, selected: selected == $0.id) }
                     case .overdue:
-                        HStack {
-                            Text("Carry unfinished work forward").font(.system(size: 11)).foregroundStyle(theme.ink2)
+                        HStack(spacing: 10) {
+                            Text("Move all to").font(.system(size: 11)).foregroundStyle(theme.ink2)
+                            Group {
+                                Button("Today") { ws.carryOverdue(to: ws.today) }
+                                Button("Pick a date…") { hub.ui.pickingDay = .overdue }
+                            }
+                            .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
                             Spacer()
-                            Button("Move all to today", action: ws.carryOverdueToToday)
-                                .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
                         }
                         .padding(.vertical, 4)
                         ForEach(overdue) { TaskRow(task: $0, showsDay: true, selected: selected == $0.id) }
@@ -113,7 +116,7 @@ struct TasksCard: View {
 
 /// Keyboard use of a task list: Up and Down select, Space completes or reopens, Delete deletes with Undo.
 /// One focus stop for the list, so the composer outside it never gets these keys. Fields inside the list (a rename,
-/// the Week composer) and the open task editor are handled by `isTyping`.
+/// the Week composer), the open task editor and the date picker are handled by `isTyping`.
 private struct TaskListKeys: ViewModifier {
     @Environment(AppHub.self) private var hub
     let ids: [UUID]
@@ -146,9 +149,9 @@ private struct TaskListKeys: ViewModifier {
         }
     }
 
-    /// A rename, a field inside the list and the open task editor keep their keys.
+    /// A rename, a field inside the list, the open task editor and the open date picker keep their keys.
     private var isTyping: Bool {
-        hub.ui.editingTask != nil || NSApp.keyWindow?.firstResponder is NSTextView
+        hub.ui.editingTask != nil || hub.ui.pickingDay != nil || NSApp.keyWindow?.firstResponder is NSTextView
     }
 
     private func move(_ offset: Int) -> KeyPress.Result {
@@ -392,6 +395,7 @@ struct TaskRow: View {
                 Button("Tomorrow") { hub.workspace.move(task.id, to: Day.adding(1, to: hub.workspace.today, calendar: hub.workspace.calendar)) }
                 Button("Next week") { hub.workspace.move(task.id, to: Day.adding(7, to: hub.workspace.today, calendar: hub.workspace.calendar)) }
                 Button("Inbox") { hub.workspace.move(task.id, to: nil) }
+                Button("Pick a date…") { hub.ui.pickingDay = .task(task.id) }
                 Divider()
                 Button("Rename") { beginRename() }
                 Button("Delete", role: .destructive) { hub.deleteTask(task.id) }
@@ -651,6 +655,17 @@ struct TaskEditor: View {
                                 Text("Yearly").tag(RepeatRule.Kind?.some(.yearly))
                             }
                             .labelsHidden().frame(width: 120)
+                            if let rule = task.repeatRule, rule.kind != .weekdays, rule.weekdays?.isEmpty ?? true {
+                                Stepper(value: Binding(
+                                    get: { rule.interval },
+                                    set: { n in ws.update(id) { $0.repeatRule?.interval = max(1, n) } }
+                                ), in: 1...99) {
+                                    Text(every(rule)).font(.system(size: 12))
+                                }
+                            }
+                        }
+                        if let rule = task.repeatRule, rule.kind == .weekly {
+                            row("On") { weekdayToggles(rule, anchor: Day.weekday(task.day ?? ws.today, calendar: cal)) }
                         }
                         row("Focus for") {
                             Stepper(value: Binding(
@@ -717,11 +732,125 @@ struct TaskEditor: View {
         }
     }
 
+    private func every(_ rule: RepeatRule) -> String {
+        let unit = [RepeatRule.Kind.daily: "day", .weekly: "week", .monthly: "month", .yearly: "year"][rule.kind] ?? "day"
+        return rule.interval == 1 ? "every \(unit)" : "every \(rule.interval) \(unit)s"
+    }
+
+    /// With no days chosen, a weekly repeat follows the task's own weekday, so that day shows as chosen.
+    private func weekdayToggles(_ rule: RepeatRule, anchor: Int) -> some View {
+        let cal = ws.calendar
+        let chosen = Set(rule.weekdays.flatMap { $0.isEmpty ? nil : $0 } ?? [anchor])
+        return HStack(spacing: 3) {
+            ForEach(0..<7, id: \.self) { i in
+                let weekday = (cal.firstWeekday - 1 + i) % 7 + 1
+                let on = chosen.contains(weekday)
+                Button {
+                    var days = chosen
+                    if on { days.remove(weekday) } else { days.insert(weekday) }
+                    let plain = days.isEmpty || days == [anchor]
+                    ws.update(id) { t in
+                        t.repeatRule?.weekdays = plain ? nil : days.sorted()
+                        // Chosen days repeat every week, so an interval would be silently ignored.
+                        if !plain { t.repeatRule?.interval = 1 }
+                    }
+                } label: {
+                    Text(cal.shortWeekdaySymbols[weekday - 1])
+                        .font(.system(size: 10, weight: on ? .semibold : .regular))
+                        .frame(width: 30, height: 20)
+                        .background(on ? Theme.accent.opacity(0.85) : .white.opacity(0.08), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(cal.weekdaySymbols[weekday - 1])
+                .accessibilityLabel(cal.weekdaySymbols[weekday - 1])
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+    }
+
     private func row<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 8) {
             Text(label).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).frame(width: 56, alignment: .leading)
             content()
         }
+    }
+}
+
+// MARK: Date picker
+
+/// Picks any day for the shown day, one task or everything overdue.
+struct DayPicker: View {
+    @Environment(AppHub.self) private var hub
+    let pick: DayPick
+    @State private var draft: Date?
+
+    var body: some View {
+        let ws = hub.workspace
+        let cal = ws.calendar
+        let today = Day.date(ws.today, calendar: cal)
+        let start: Date = switch pick {
+        case .shownDay: Day.date(hub.ui.selectedDay, calendar: cal)
+        case .task(let id): Day.date(ws.task(id)?.day ?? ws.today, calendar: cal)
+        case .overdue: today
+        }
+        ZStack {
+            Color.black.opacity(0.45)
+                .contentShape(Rectangle())
+                .onTapGesture { hub.ui.pickingDay = nil }
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
+                // Moving overdue work into the past would leave it overdue.
+                DatePicker(title, selection: Binding(get: { draft ?? start }, set: { draft = $0 }),
+                           in: (pick == .overdue ? today : .distantPast)..., displayedComponents: .date)
+                    .labelsHidden().datePickerStyle(.graphical)
+                    .environment(\.calendar, cal).environment(\.timeZone, cal.timeZone)
+                HStack(spacing: 14) {
+                    Button("Cancel") { hub.ui.pickingDay = nil }.foregroundStyle(.white.opacity(0.6))
+                    Spacer()
+                    if pick == .shownDay {
+                        Button("Today") { choose(today) }
+                    }
+                    Button(pick == .shownDay ? "Go" : "Move") { choose(draft ?? start) }.foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain).font(.system(size: 12, weight: .semibold))
+            }
+            .padding(14)
+            .fixedSize()
+            .foregroundStyle(.white)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .environment(\.colorScheme, .dark)
+        // A task finished or deleted elsewhere (sync, MCP) would leave nothing to move.
+        .onChange(of: taskGone, initial: true) { _, gone in
+            if gone { hub.ui.pickingDay = nil }
+        }
+    }
+
+    private var taskGone: Bool {
+        guard case .task(let id) = pick else { return false }
+        return hub.workspace.task(id)?.isCompleted ?? true
+    }
+
+    private var title: String {
+        switch pick {
+        case .shownDay: "Go to a day"
+        case .task(let id): "Move “\(hub.workspace.task(id)?.title ?? "")” to"
+        case .overdue: "Move all overdue tasks to"
+        }
+    }
+
+    private func choose(_ date: Date) {
+        let ws = hub.workspace
+        let day = Day.key(date, calendar: ws.calendar)
+        switch pick {
+        case .shownDay: hub.ui.selectedDay = day
+        case .task(let id):
+            // Moving to the same day would still send it to the bottom.
+            if ws.task(id)?.day != day { ws.move(id, to: day) }
+        case .overdue: ws.carryOverdue(to: day)
+        }
+        hub.ui.pickingDay = nil
     }
 }
 

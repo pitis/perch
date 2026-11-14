@@ -279,7 +279,7 @@ private extension View {
     }
 }
 
-/// One page plus the overlays every page shares: the task editor and the Undo toast.
+/// One page plus the overlays every page shares: the task editor, the date picker and the Undo toast.
 struct PageContent: View {
     @Environment(AppHub.self) private var hub
     let page: Page
@@ -299,6 +299,9 @@ struct PageContent: View {
             if let id = hub.ui.editingTask, hub.workspace.task(id) != nil {
                 TaskEditor(id: id)
             }
+        }
+        .overlay {
+            if let pick = hub.ui.pickingDay { DayPicker(pick: pick) }
         }
         .overlay(alignment: .bottom) {
             if let toast = hub.ui.toast {

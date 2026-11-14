@@ -36,6 +36,10 @@ final class ClipsManager {
     @ObservationIgnored private var watchedFolder: URL?
     @ObservationIgnored private var saveWork: DispatchWorkItem?
 
+    enum ScreenshotWatch { case off, starting, watching, refused }
+    /// Whether the screenshot folder is really being watched, which the setup window shows. Only set on the main thread.
+    private(set) var screenshotWatch = ScreenshotWatch.off
+
     private static let limit = 40
     private static let maxTextLength = 100_000
     private static let maxImageBytes = 25 * 1024 * 1024
@@ -171,14 +175,26 @@ final class ClipsManager {
         watcher?.cancel()
         watcher = nil
         watchedFolder = nil
-        guard workspace?.data.settings.captureScreenshots == true else { return }
+        guard workspace?.data.settings.captureScreenshots == true else {
+            screenshotWatch = .off
+            return
+        }
+        screenshotWatch = .starting
 
         // The first touch of the Desktop folder shows a macOS permission prompt and blocks until it's answered,
         // which would freeze the whole app if it happened on the main thread.
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let folder = Self.screenshotFolder
             let fd = Darwin.open(folder.path, O_EVTONLY)
-            guard fd >= 0 else { return }
+            guard fd >= 0 else {
+                let error = errno
+                NSLog("Perch: can't watch the screenshot folder (errno %d)", error)
+                DispatchQueue.main.async {
+                    guard let self, self.workspace?.data.settings.captureScreenshots == true else { return }
+                    self.screenshotWatch = error == EPERM || error == EACCES ? .refused : .off
+                }
+                return
+            }
             let existing = Set((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
             DispatchQueue.main.async {
                 guard let self, self.workspace?.data.settings.captureScreenshots == true else {
@@ -193,8 +209,15 @@ final class ClipsManager {
                 source.setCancelHandler { close(fd) }
                 source.resume()
                 self.watcher = source
+                self.screenshotWatch = .watching
                 self.pruneMissing()
             }
+        }
+    }
+
+    static func openPrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+            NSWorkspace.shared.open(url)
         }
     }
 

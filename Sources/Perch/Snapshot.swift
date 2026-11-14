@@ -22,7 +22,18 @@ enum Snapshot {
         hub.ui.mode = .open
         hub.ui.editingTask = hub.workspace.open(on: hub.workspace.today).first?.id
         render(hub, name: "editor", folder: folder)
+        if let gym = hub.workspace.data.tasks.first(where: { $0.repeatRule != nil }) {
+            hub.ui.editingTask = gym.id
+            hub.workspace.update(gym.id) { $0.repeatRule = RepeatRule(kind: .weekly, interval: 2) }
+            render(hub, name: "editor-repeat-every", folder: folder)
+            hub.workspace.update(gym.id) { $0.repeatRule = RepeatRule(kind: .weekly, weekdays: [2, 4, 6]) }
+            render(hub, name: "editor-repeat-days", folder: folder)
+        }
         hub.ui.editingTask = nil
+
+        hub.ui.pickingDay = .task(hub.workspace.open(on: hub.workspace.today)[1].id)
+        render(hub, name: "pick-date", folder: folder)
+        hub.ui.pickingDay = nil
 
         hub.ui.mode = .activity
         hub.ui.activity = hub.workspace.data.tasks.first { $0.reminderAt != nil }
@@ -38,6 +49,7 @@ enum Snapshot {
         render(hub, name: "compact-greeting", folder: folder, size: CGSize(width: 480, height: 50))
 
         renderView(SettingsView().environment(hub), name: "settings", folder: folder, size: CGSize(width: 560, height: 1400))
+        renderView(SetupView(done: {}).environment(hub).background(Color(nsColor: .windowBackgroundColor)), name: "setup", folder: folder, size: CGSize(width: 520, height: 460))
         renderView(Image(nsImage: PerchedBird.menuBarImage).renderingMode(.template).foregroundStyle(.white)
                        .frame(width: 60, height: 24).background(.black),
                    name: "menubar", folder: folder, size: CGSize(width: 60, height: 24))

@@ -76,6 +76,8 @@ macOS asks for each permission when you first use the feature that needs it:
 - **Microphone and Speech Recognition**, the first time you click the microphone. Speech becomes text on your Mac.
 - **The folder your screenshots go to**, usually the Desktop, only if you turn on screenshots in Clips. Clips also keeps track of files you copy, but it doesn't read one from Desktop, Documents or Downloads until you use its clip, unless Perch already has access to that folder, and macOS may ask about the folder then.
 
+The first launch, before Perch has any saved data, also opens a short setup where you can turn on Calendar, notifications and screenshots up front, or skip them. Settings › General opens it again.
+
 AI agents reach Perch through a local socket that only your user account can open.
 
 ## Connecting an AI agent
