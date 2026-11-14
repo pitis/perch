@@ -232,9 +232,14 @@ final class WorkspaceTests: XCTestCase {
         let first = w.add("first", defaultDay: "2026-11-01")!
         let second = w.add("second", defaultDay: "2026-11-03")!
         let waiting = w.add("waiting", defaultDay: "2026-11-12")!
+        let finished = w.add("finished", defaultDay: "2026-11-02")!
+        w.setCompleted(finished.id, true)
+        let inbox = w.add("someday", defaultDay: nil)!
         w.carryOverdue(to: "2026-11-12")
         XCTAssertTrue(w.overdue.isEmpty)
         XCTAssertEqual(w.open(on: "2026-11-12").map(\.id), [waiting.id, first.id, second.id], "oldest first, after what's already there")
+        XCTAssertEqual(w.task(finished.id)?.day, "2026-11-02", "finished work stays on its day")
+        XCTAssertNil(w.task(inbox.id)?.day, "the Inbox isn't overdue")
     }
 
     func testOverdueCarryForwardAndMoves() {

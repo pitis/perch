@@ -63,7 +63,8 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 
 **Picking any date** ([#15](https://github.com/pitis/perch/issues/15))
 - The date on the tasks card opens a calendar to go to any day, with Today to jump back
-- Pick a date… in a task's menu, and on Overdue to move everything at once (unit-tested)
+- Pick a date… in a task's menu
+- Pick a date… on Overdue, to move everything there at once (unit-tested)
 
 **Notepad** ([#3](https://github.com/pitis/perch/issues/3))
 - Typing and autosave

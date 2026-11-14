@@ -251,7 +251,7 @@ struct PageHeader: View {
     }
 }
 
-/// One page plus the overlays every page shares: the task editor and the Undo toast.
+/// One page plus the overlays every page shares: the task editor, the date picker and the Undo toast.
 struct PageContent: View {
     @Environment(AppHub.self) private var hub
     let page: Page

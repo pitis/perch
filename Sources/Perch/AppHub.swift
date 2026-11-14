@@ -62,7 +62,8 @@ final class NotchUI {
     var wantsComposerFocus = false
     var toast: Toast?
     var editingTask: UUID?
-    /// The open date picker. Like the editor, it's an overlay, because the notch can't host popovers.
+    /// The open date picker. It's an overlay because `NotchController.mayAutoClose` doesn't know about popovers.
+    /// While it's set the panel stays open, and Esc closes the picker first.
     var pickingDay: DayPick?
     var hoveredTask: UUID?
     var swipingTask: UUID?

@@ -41,14 +41,14 @@ struct TasksCard: View {
                     case .completed:
                         ForEach(done) { TaskRow(task: $0) }
                     case .overdue:
-                        HStack {
-                            Text("Carry unfinished work forward").font(.system(size: 11)).foregroundStyle(theme.ink2)
-                            Spacer()
+                        HStack(spacing: 10) {
+                            Text("Move all to").font(.system(size: 11)).foregroundStyle(theme.ink2)
                             Group {
-                                Button("Move all to today") { ws.carryOverdue(to: ws.today) }
+                                Button("Today") { ws.carryOverdue(to: ws.today) }
                                 Button("Pick a date…") { hub.ui.pickingDay = .overdue }
                             }
                             .buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
+                            Spacer()
                         }
                         .padding(.vertical, 4)
                         ForEach(overdue) { TaskRow(task: $0, showsDay: true) }
@@ -646,9 +646,10 @@ struct DayPicker: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
                 // Moving overdue work into the past would leave it overdue.
-                DatePicker("", selection: Binding(get: { draft ?? start }, set: { draft = $0 }),
+                DatePicker(title, selection: Binding(get: { draft ?? start }, set: { draft = $0 }),
                            in: (pick == .overdue ? today : .distantPast)..., displayedComponents: .date)
                     .labelsHidden().datePickerStyle(.graphical)
+                    .environment(\.calendar, cal).environment(\.timeZone, cal.timeZone)
                 HStack(spacing: 14) {
                     Button("Cancel") { hub.ui.pickingDay = nil }.foregroundStyle(.white.opacity(0.6))
                     Spacer()
@@ -665,6 +666,15 @@ struct DayPicker: View {
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
         }
         .environment(\.colorScheme, .dark)
+        // A task finished or deleted elsewhere (sync, MCP) would leave nothing to move.
+        .onChange(of: taskGone, initial: true) { _, gone in
+            if gone { hub.ui.pickingDay = nil }
+        }
+    }
+
+    private var taskGone: Bool {
+        guard case .task(let id) = pick else { return false }
+        return hub.workspace.task(id)?.isCompleted ?? true
     }
 
     private var title: String {
@@ -680,7 +690,9 @@ struct DayPicker: View {
         let day = Day.key(date, calendar: ws.calendar)
         switch pick {
         case .shownDay: hub.ui.selectedDay = day
-        case .task(let id): ws.move(id, to: day)
+        case .task(let id):
+            // Moving to the same day would still send it to the bottom.
+            if ws.task(id)?.day != day { ws.move(id, to: day) }
         case .overdue: ws.carryOverdue(to: day)
         }
         hub.ui.pickingDay = nil

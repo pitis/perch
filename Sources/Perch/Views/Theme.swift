@@ -222,7 +222,7 @@ struct IconButton: View {
     }
 }
 
-/// `< 7 Nov >`, shared by the tasks and Notepad. Clicking the date jumps back to today.
+/// `< 7 Nov >` on the tasks card. Clicking the date opens the date picker.
 struct DayNavigator: View {
     @Environment(AppHub.self) private var hub
 
