@@ -52,7 +52,7 @@ struct TasksCard: View {
                     }
                 }
             }
-            .taskListKeys(shown.map(\.id), selected: $selected)
+            .modifier(TaskListKeys(ids: shown.map(\.id), selected: $selected))
             .frame(maxHeight: .infinity)
             .overlay {
                 if current == .todo, todo.isEmpty {
@@ -97,13 +97,7 @@ struct TasksCard: View {
     }
 }
 
-extension View {
-    /// Keyboard use of a task list: Up and Down select, Space completes or reopens, Delete deletes with Undo.
-    func taskListKeys(_ ids: [UUID], selected: Binding<UUID?>) -> some View {
-        modifier(TaskListKeys(ids: ids, selected: selected))
-    }
-}
-
+/// Keyboard use of a task list: Up and Down select, Space completes or reopens, Delete deletes with Undo.
 /// The whole list is one Tab stop, like a table, so these keys never reach the composer or another text field.
 private struct TaskListKeys: ViewModifier {
     @Environment(AppHub.self) private var hub
@@ -135,7 +129,7 @@ private struct TaskListKeys: ViewModifier {
         }
     }
 
-    /// Renaming a row or typing in a field inside the list keeps its keys.
+    /// A rename, a field inside the list and the open task editor keep their keys.
     private var isTyping: Bool {
         hub.ui.editingTask != nil || NSApp.keyWindow?.firstResponder is NSTextView
     }
@@ -767,7 +761,7 @@ private struct WeekColumn: View {
                     .buttonStyle(.plain)
                 }
             }
-            .taskListKeys(tasks.map(\.id), selected: $selected)
+            .modifier(TaskListKeys(ids: tasks.map(\.id), selected: $selected))
         }
         .padding(10)
         .frame(maxHeight: .infinity, alignment: .top)
