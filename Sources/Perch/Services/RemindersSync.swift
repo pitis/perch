@@ -257,16 +257,24 @@ final class RemindersSync {
         let cal = workspace.calendar
         if let at = task.reminderAt {
             reminder.dueDateComponents = cal.dateComponents([.year, .month, .day, .hour, .minute], from: at)
-            // The alarm is what makes it ring on iPhone and Apple Watch.
-            reminder.alarms = [EKAlarm(absoluteDate: at)]
         } else if let day = task.day {
             reminder.dueDateComponents = cal.dateComponents([.year, .month, .day], from: Day.date(day, calendar: cal))
-            reminder.alarms = nil
         } else {
             reminder.dueDateComponents = nil
-            reminder.alarms = nil
             // EventKit refuses a repeating reminder with no date, and that would fail every pass from then on.
             reminder.recurrenceRules = nil
         }
+        // An alarm is what makes it ring on iPhone and Apple Watch. `Reconciler.alarms` decides which ones set there stay.
+        let current = reminder.alarms ?? []
+        let (keep, add) = Reconciler.alarms(current.map(kind), for: task)
+        var alarms = zip(current, keep).compactMap { $1 ? $0 : nil }
+        if let add { alarms.append(EKAlarm(absoluteDate: add)) }
+        reminder.alarms = alarms.isEmpty ? nil : alarms
+    }
+
+    private func kind(of alarm: EKAlarm) -> RemoteAlarm {
+        // First, because a location alarm also has no date and an offset of 0, which would read as Perch's own.
+        if alarm.structuredLocation != nil || alarm.proximity != .none { return .location }
+        return alarm.absoluteDate != nil ? .atTime : .relative(alarm.relativeOffset)
     }
 }
