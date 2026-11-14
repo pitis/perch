@@ -167,6 +167,8 @@ final class RepeatTests: XCTestCase {
     func testNextOccurrences() {
         let today = "2026-11-07"
         XCTAssertEqual(RepeatRule(kind: .daily).next(from: today, today: today, calendar: utc), "2026-11-08")
+        XCTAssertEqual(RepeatRule(kind: .daily, interval: 3).next(from: today, today: today, calendar: utc), "2026-11-10")
+        XCTAssertEqual(RepeatRule(kind: .weekly, interval: 2).next(from: today, today: today, calendar: utc), "2026-11-21")
         XCTAssertEqual(RepeatRule(kind: .weekdays).next(from: "2026-11-06", today: "2026-11-06", calendar: utc), "2026-11-09", "Friday skips the weekend")
         XCTAssertEqual(RepeatRule(kind: .weekly, weekdays: [2, 5]).next(from: "2026-11-09", today: "2026-11-09", calendar: utc), "2026-11-12")
         XCTAssertEqual(RepeatRule(kind: .daily).next(from: "2026-11-01", today: today, calendar: utc), "2026-11-08", "overdue jumps past today")
@@ -523,6 +525,104 @@ final class ReconcileTests: XCTestCase {
         let (w, _) = makeWorkspace()
         w.importRemote(RemoteReminder(id: "R", title: "old", due: RemoteDue(day: "2026-11-07", time: earlier), modifiedAt: later))
         XCTAssertTrue(w.takeDueReminders().isEmpty)
+    }
+
+    func testRepeatsFromRemindersInPerchTerms() {
+        func rule(_ f: RemoteRecurrence.Frequency, _ interval: Int = 1, _ days: [Int] = [], unsupported: Bool = false) -> RepeatRule? {
+            RemoteRecurrence(frequency: f, interval: interval, weekdays: days, unsupported: unsupported).repeatRule()
+        }
+        XCTAssertEqual(rule(.daily, 3), RepeatRule(kind: .daily, interval: 3))
+        XCTAssertEqual(rule(.weekly, 2), RepeatRule(kind: .weekly, interval: 2))
+        XCTAssertEqual(rule(.weekly, 1, [6, 2, 3, 5, 4]), RepeatRule(kind: .weekdays))
+        XCTAssertEqual(rule(.weekly, 1, [5, 2]), RepeatRule(kind: .weekly, weekdays: [2, 5]))
+        XCTAssertEqual(rule(.monthly), RepeatRule(kind: .monthly))
+        XCTAssertEqual(rule(.yearly, 2), RepeatRule(kind: .yearly, interval: 2))
+        XCTAssertNil(rule(.weekly, 2, [2, 5]), "every other week on chosen days")
+        XCTAssertNil(rule(.daily, 1, [2]))
+        XCTAssertNil(rule(.weekly, 1, [9]))
+        XCTAssertNil(rule(.monthly, unsupported: true), "ends, or pins days of the month")
+
+        let biweekly = RemoteRecurrence(frequency: .weekly, interval: 2, weekdays: [2])
+        XCTAssertEqual(biweekly.repeatRule(dueWeekday: 2), RepeatRule(kind: .weekly, interval: 2), "every 2 weeks on its own day")
+        XCTAssertNil(biweekly.repeatRule(dueWeekday: 5))
+    }
+
+    func testRepeatSetInRemindersMovesToPerch() {
+        let t = linked("gym", "R")
+        let weekly = RemoteRecurrence(frequency: .weekly, interval: 1, weekdays: [2, 5])
+        let item = RemoteReminder(id: "R", title: "gym", recurrence: weekly, modifiedAt: later)
+        XCTAssertEqual(plan([t], [item]), [.stripRecurrence("R"), .adoptRepeat(t.id, RepeatRule(kind: .weekly, weekdays: [2, 5]))])
+
+        var renamed = item
+        renamed.title = "Gym"
+        XCTAssertEqual(plan([t], [renamed]), [.stripRecurrence("R"), .adoptRepeat(t.id, weekly.repeatRule()), .pullLocal(t.id, renamed)],
+                       "the repeat lands before a completion in the same pass can spawn")
+    }
+
+    func testRepeatPerchAlreadyHasIsStillTakenOffTheReminder() {
+        var t = linked("gym", "R")
+        t.repeatRule = RepeatRule(kind: .weekly)
+        let item = RemoteReminder(id: "R", title: "gym", recurrence: RemoteRecurrence(frequency: .weekly, interval: 1), modifiedAt: later)
+        XCTAssertEqual(plan([t], [item]), [.stripRecurrence("R")], "added again on iPhone: only one side may make occurrences")
+    }
+
+    func testNewRuleOnAFinishedRepeatDoesNotMakeASecondNext() {
+        let (w, _) = makeWorkspace()
+        let t = w.add("gym every day", defaultDay: w.today)!
+        w.setCompleted(t.id, true)
+        w.setRemoteRepeat(RepeatRule(kind: .weekly), for: t.id)
+        XCTAssertEqual(w.data.tasks.filter { !$0.isCompleted }.count, 1)
+    }
+
+    func testRuleAddedAfterFinishingHereStillMakesTheNextOne() {
+        let (w, _) = makeWorkspace()
+        let t = w.add("gym", defaultDay: w.today)!
+        w.setRemoteId("R", for: t.id)
+        w.setCompleted(t.id, true)
+        let item = RemoteReminder(id: "R", title: "gym", due: RemoteDue(day: "2026-11-07"),
+                                  recurrence: RemoteRecurrence(frequency: .weekly, interval: 1), modifiedAt: earlier)
+        let weekly = RepeatRule(kind: .weekly)
+        XCTAssertEqual(plan(w.data.tasks, [item]), [.stripRecurrence("R"), .adoptRepeat(t.id, weekly), .pushRemote(t.id, remoteId: "R")])
+        w.setRemoteRepeat(weekly, for: t.id)
+        w.setRemoteRepeat(weekly, for: t.id)
+        XCTAssertEqual(w.open(on: "2026-11-14").map(\.title), ["Gym"], "the rule came off the reminder, so Perch makes next week's")
+        XCTAssertEqual(w.data.tasks.count, 2)
+    }
+
+    func testRepeatPerchCantSayStaysInReminders() {
+        var t = linked("rent", "R")
+        let item = RemoteReminder(id: "R", title: "rent",
+                                  recurrence: RemoteRecurrence(frequency: .monthly, interval: 1, unsupported: true), modifiedAt: later)
+        XCTAssertEqual(plan([t], [item]), [])
+        t.repeatRule = RepeatRule(kind: .monthly)
+        XCTAssertEqual(plan([t], [item]), [.adoptRepeat(t.id, nil)], "two repeats would make every occurrence twice")
+    }
+
+    func testImportedRepeatComesWithItsRule() {
+        let weekly = RemoteRecurrence(frequency: .weekly, interval: 2)
+        let item = RemoteReminder(id: "R", title: "bins", due: RemoteDue(day: "2026-11-09"), recurrence: weekly)
+        XCTAssertEqual(plan([], [item]), [.importLocal(item), .stripRecurrence("R")])
+        var ownDay = item
+        ownDay.recurrence?.weekdays = [2]
+        XCTAssertEqual(plan([], [ownDay]), [.importLocal(ownDay), .stripRecurrence("R")], "9 November is a Monday")
+        var odd = item
+        odd.recurrence?.unsupported = true
+        XCTAssertEqual(plan([], [odd]), [.importLocal(odd)])
+
+        let (w, _) = makeWorkspace()
+        w.importRemote(item)
+        w.importRemote(RemoteReminder(id: "S", title: "odd", recurrence: odd.recurrence))
+        w.importRemote(ownDay)
+        XCTAssertEqual(w.data.tasks.map(\.repeatRule), [RepeatRule(kind: .weekly, interval: 2), nil, RepeatRule(kind: .weekly, interval: 2)])
+    }
+
+    func testAdoptedRepeatIsNotALocalEdit() {
+        let (w, _) = makeWorkspace()
+        let t = w.add("gym", defaultDay: w.today)!
+        let before = w.task(t.id)!.modifiedAt
+        w.setRemoteRepeat(RepeatRule(kind: .daily), for: t.id)
+        XCTAssertEqual(w.task(t.id)!.repeatRule, RepeatRule(kind: .daily))
+        XCTAssertEqual(w.task(t.id)!.modifiedAt, before)
     }
 }
 

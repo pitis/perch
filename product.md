@@ -91,6 +91,11 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Never run against real Reminders, though its decisions are unit-tested
 - Off by default, and it writes to real data, so try it with throwaway tasks first
 
+**Repeats** ([#17](https://github.com/pitis/perch/issues/17))
+- Every few days, weeks, months or years (up to 99), or weekly on chosen weekdays, in the task editor
+- A repeat set in the Reminders app becomes the task's repeat, and the rule comes off the reminder so the next one isn't made twice (unit-tested, never run against real Reminders)
+- A repeat Perch can't express, such as one that ends or every other week on chosen days, stays in Reminders, and the task doesn't repeat here (a repeat set on the task in Perch is cleared)
+
 **External monitors and full-screen** ([#5](https://github.com/pitis/perch/issues/5))
 - A drawn notch on monitors, and following the pointer between screens
 - Stepping aside for full-screen apps and Split View, with the top edge still opening it
@@ -152,7 +157,6 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 
 ## Not done: not built yet
 
-- Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
 
 ## Left out on purpose
