@@ -38,6 +38,7 @@ enum Snapshot {
         render(hub, name: "compact-greeting", folder: folder, size: CGSize(width: 480, height: 50))
 
         renderView(SettingsView().environment(hub), name: "settings", folder: folder, size: CGSize(width: 560, height: 1400))
+        renderView(SetupView(done: {}).environment(hub).background(Color(nsColor: .windowBackgroundColor)), name: "setup", folder: folder, size: CGSize(width: 520, height: 460))
         renderView(Image(nsImage: PerchedBird.menuBarImage).renderingMode(.template).foregroundStyle(.white)
                        .frame(width: 60, height: 24).background(.black),
                    name: "menubar", folder: folder, size: CGSize(width: 60, height: 24))

@@ -18,6 +18,9 @@ struct SettingsView: View {
                 if let launchError { Text(launchError).font(.caption).foregroundStyle(.red) }
                 Toggle("Chime for reminders and timers", isOn: $ws.data.settings.chime)
                 LabeledContent("Open with") { Text("Hover the notch or press ⌥N").foregroundStyle(.secondary) }
+                LabeledContent("Calendar, notifications and screenshots") {
+                    Button("Set up…", action: hub.openSetupWindow).controlSize(.small)
+                }
             }
 
             Section {
@@ -110,12 +113,8 @@ struct SettingsView: View {
                     }
                 }
                 if let backupMessage { Text(backupMessage).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
-                Button("Allow notifications while Perch is closed…") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .controlSize(.small)
+                Button("Allow notifications while Perch is closed…", action: AppHub.openNotificationSettings)
+                    .controlSize(.small)
             }
         }
         .formStyle(.grouped)

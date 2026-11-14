@@ -51,12 +51,12 @@ final class CalendarService {
     }
 
     func refresh() {
-        guard let workspace, workspace.data.settings.calendarEnabled,
-              EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+        let current = EKEventStore.authorizationStatus(for: .event) // it may have changed in System Settings
+        if current != status { status = current }
+        guard let workspace, workspace.data.settings.calendarEnabled, current == .fullAccess else {
             if workspace != nil { events = [] }
             return
         }
-        status = .fullAccess
         let cal = workspace.calendar
         let start = cal.startOfDay(for: Date())
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }

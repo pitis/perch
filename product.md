@@ -1,6 +1,6 @@
 # Perch: what's done and what isn't
 
-Last updated: 8 November 2026
+Last updated: 14 November 2026
 
 The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) and [changelog](https://www.notchowl.com/changelog).
 
@@ -139,9 +139,14 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Romanian task phrases, with or without diacritics: "sună-o pe mama mâine la 5", "chiria până vineri" (unit-tested)
 - Dates in any other language Apple's on-device model reads (German, French, Spanish, Japanese…), filled in just after adding, with Apple Intelligence on
 
+**First-run setup** ([#13](https://github.com/pitis/perch/issues/13))
+- The setup screen itself (seen only in renders)
+- Opening once, on the first launch before there's any saved data
+- Setting up or skipping Calendar, notifications and screenshots from it, and Open Settings when access was refused
+- Opening it again from Settings › General
+
 ## Not done: not built yet
 
-- First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
 - Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Repeats set on iPhone, and custom repeat rules in the task editor ([#17](https://github.com/pitis/perch/issues/17))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
