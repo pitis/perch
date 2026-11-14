@@ -264,15 +264,17 @@ final class RemindersSync {
             // EventKit refuses a repeating reminder with no date, and that would fail every pass from then on.
             reminder.recurrenceRules = nil
         }
-        // Perch's alarm is what makes it ring on iPhone and Apple Watch. Ones set there, like a location, stay.
+        // An alarm is what makes it ring on iPhone and Apple Watch. `Reconciler.alarms` decides which ones set there stay.
         let current = reminder.alarms ?? []
         let (keep, add) = Reconciler.alarms(current.map(kind), for: task)
-        let alarms = zip(current, keep).filter { $0.1 }.map { $0.0 } + (add.map { [EKAlarm(absoluteDate: $0)] } ?? [])
+        var alarms = zip(current, keep).compactMap { $1 ? $0 : nil }
+        if let add { alarms.append(EKAlarm(absoluteDate: add)) }
         reminder.alarms = alarms.isEmpty ? nil : alarms
     }
 
     private func kind(of alarm: EKAlarm) -> RemoteAlarm {
-        if alarm.structuredLocation != nil { return .location }
+        // First, because a location alarm also has no date and an offset of 0, which would read as Perch's own.
+        if alarm.structuredLocation != nil || alarm.proximity != .none { return .location }
         return alarm.absoluteDate != nil ? .atTime : .relative(alarm.relativeOffset)
     }
 }

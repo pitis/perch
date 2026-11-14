@@ -90,7 +90,7 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 **Two-way Apple Reminders sync, for iPhone and Apple Watch** ([#4](https://github.com/pitis/perch/issues/4))
 - Never run against real Reminders, though its decisions are unit-tested
 - Off by default, and it writes to real data, so try it with throwaway tasks first
-- Alarms set on iPhone, like "When I arrive" or an early reminder, stay when Perch updates the reminder (unit-tested, never run against real Reminders) ([#46](https://github.com/pitis/perch/issues/46))
+- A location alarm or an early reminder set on iPhone stays when Perch updates the reminder. An early reminder comes off with the task's time, and an alarm doesn't carry over to the next occurrence of a repeat (unit-tested, never run against real Reminders) ([#46](https://github.com/pitis/perch/issues/46))
 
 **Repeats** ([#17](https://github.com/pitis/perch/issues/17))
 - Every few days, weeks, months or years (up to 99), or weekly on chosen weekdays, in the task editor

@@ -481,15 +481,19 @@ final class ReconcileTests: XCTestCase {
         XCTAssertEqual(pushed.keep, [false, true, true], "Perch replaces only its own alarm at a set time")
         XCTAssertEqual(pushed.add, timed.reminderAt)
 
-        var inbox = timed
-        inbox.day = nil
-        inbox.reminderAt = nil
-        let undated = Reconciler.alarms([early, .location], for: inbox)
-        XCTAssertEqual(undated.keep, [false, true], "an early reminder goes with the date, a location stays")
-        XCTAssertNil(undated.add)
+        var dateOnly = timed
+        dateOnly.reminderAt = nil // "Reminder" unticked in the editor: the day stays
+        let untimed = Reconciler.alarms([early, .relative(0), .location], for: dateOnly)
+        XCTAssertEqual(untimed.keep, [false, false, true], "alarms tied to the time go with it, so the reminder no longer rings")
+        XCTAssertNil(untimed.add)
 
-        XCTAssertNil(Reconciler.alarms([.relative(0)], for: timed).add, "one set on iPhone at the due time already rings then")
-        XCTAssertEqual(Reconciler.alarms([], for: timed).add, timed.reminderAt)
+        var inbox = dateOnly
+        inbox.day = nil
+        XCTAssertEqual(Reconciler.alarms([early, .location], for: inbox).keep, [false, true])
+
+        let atDue = Reconciler.alarms([.atTime, .relative(0)], for: timed)
+        XCTAssertEqual(atDue.keep, [false, false], "one at the due time is Perch's too, so the reminder rings once")
+        XCTAssertEqual(atDue.add, timed.reminderAt)
     }
 
     func testFinishedOnBothSidesUnlinksAndNeverComesBack() {
