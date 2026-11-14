@@ -100,6 +100,12 @@ final class ClipsManager {
         saveSoon()
     }
 
+    /// Whether reading the clip's file could raise a macOS prompt, because it's in a protected folder Perch hasn't been
+    /// granted. Such files are only read when you use the clip.
+    func mayPrompt(_ clip: Clip) -> Bool {
+        clip.path.map { ProtectedFolders.mayPrompt($0, granted: watchedFolder) } ?? false
+    }
+
     /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
     /// protected folder are skipped unless it holds the screenshot folder Perch watches, because checking them
     /// could raise a macOS prompt, so their clips stay even after the file is gone.
@@ -270,7 +276,7 @@ final class ClipsManager {
     /// A gone clip is removed instead, and nothing else changes. Files in a protected folder Perch hasn't been granted
     /// aren't checked, because that could raise a macOS prompt, so their clips behave as before.
     private func ifPresent(_ clip: Clip, _ use: @escaping () -> Void) {
-        guard clip.text == nil, let path = clip.path, !ProtectedFolders.mayPrompt(path, granted: watchedFolder) else { return use() }
+        guard clip.text == nil, let path = clip.path, !mayPrompt(clip) else { return use() }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let gone = FileCheck.isGone(path)
             DispatchQueue.main.async {
@@ -315,7 +321,8 @@ final class ClipsManager {
 
     func open(_ clip: Clip) {
         if let url = clip.url {
-            ifPresent(clip) { NSWorkspace.shared.open(url) }
+            // Off the main thread: opening may be the first touch of a protected folder, which can wait on a prompt.
+            ifPresent(clip) { DispatchQueue.global(qos: .userInitiated).async { NSWorkspace.shared.open(url) } }
         } else if let text = clip.text {
             // Plain text has no file to open, so it goes to the default text editor through a temporary one.
             let file = FileManager.default.temporaryDirectory.appendingPathComponent("Perch clip \(clip.id.uuidString.prefix(6)).txt")
