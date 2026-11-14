@@ -43,8 +43,8 @@ public enum SyncAction: Equatable, Sendable {
     case deleteLocal(UUID)
     case unlink(UUID)
     case deleteRemote(String)
-    /// A queued delete whose reminder is no longer in the Perch list (deleted on iPhone, or moved to another list).
-    /// It's forgotten rather than retried.
+    /// A queued delete whose reminder is no longer in the Perch list (deleted on iPhone, moved to another list, or the
+    /// list hasn't finished loading). It's forgotten rather than retried.
     case dropPendingDelete(String)
 }
 
@@ -96,8 +96,8 @@ public enum Reconciler {
     public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        // An empty fetch is trusted here as it is for linked tasks: if the list was only away, a forgotten delete comes
-        // back as a task, which beats keeping the id forever. A missing list already forgets them all (`unlinkAllRemote`).
+        // A queued delete missing from the fetch is forgotten even if the list only looks empty for now: if it comes back,
+        // it comes back as a task. Keeping it would hold the id forever when the reminder is really gone.
         var actions: [SyncAction] = pendingDeletes.map { byId[$0] != nil ? .deleteRemote($0) : .dropPendingDelete($0) }
 
         let linked = tasks.filter { $0.remoteId != nil }
