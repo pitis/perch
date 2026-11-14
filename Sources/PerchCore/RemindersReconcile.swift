@@ -43,7 +43,8 @@ public enum SyncAction: Equatable, Sendable {
     case deleteLocal(UUID)
     case unlink(UUID)
     case deleteRemote(String)
-    /// A queued delete whose reminder is already gone, deleted on iPhone say. There's nothing left to delete.
+    /// A queued delete whose reminder is no longer in the Perch list (deleted on iPhone, or moved to another list).
+    /// It's forgotten rather than retried.
     case dropPendingDelete(String)
 }
 
@@ -95,17 +96,15 @@ public enum Reconciler {
     public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var actions: [SyncAction] = pendingDeletes.filter { byId[$0] != nil }.map { .deleteRemote($0) }
+        // An empty fetch is trusted here as it is for linked tasks: if the list was only away, a forgotten delete comes
+        // back as a task, which beats keeping the id forever. A missing list already forgets them all (`unlinkAllRemote`).
+        var actions: [SyncAction] = pendingDeletes.map { byId[$0] != nil ? .deleteRemote($0) : .dropPendingDelete($0) }
 
         let linked = tasks.filter { $0.remoteId != nil }
         let missing = linked.filter { byId[$0.remoteId!] == nil }
         // Many items vanishing at once means the account or list went away, not that you deleted them all.
         // Keep the tasks and relink them instead of wiping the planner.
         let massLoss = missing.count >= 3 && missing.count * 2 >= linked.count
-        // A queued delete whose reminder is gone is done, unless the list looks away and the reminder may come back.
-        if !massLoss && !remote.isEmpty {
-            actions += pendingDeletes.filter { byId[$0] == nil }.map { .dropPendingDelete($0) }
-        }
 
         for task in tasks {
             guard let remoteId = task.remoteId else {
