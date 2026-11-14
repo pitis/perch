@@ -6,7 +6,8 @@ import PerchCore
 /// Applies the decisions from `Reconciler` to Apple Reminders. iCloud carries the list to iPhone and Apple Watch.
 ///
 /// Repeats live on the Perch side: each occurrence is its own reminder with no recurrence rule. A rule added in the
-/// Reminders app becomes the task's repeat and comes off the reminder; one Perch can't express stays there untouched.
+/// Reminders app becomes the task's repeat and comes off the reminder. One Perch can't express stays there, and the
+/// task's own repeat is dropped, so nothing comes twice.
 @Observable
 final class RemindersSync {
     private static let listName = "Perch"

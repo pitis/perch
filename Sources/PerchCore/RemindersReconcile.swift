@@ -11,7 +11,7 @@ public struct RemoteDue: Equatable, Sendable {
     }
 }
 
-/// A repeat rule set in the Reminders app. EventKit stays in `RemindersSync`.
+/// A repeat rule set in the Reminders app. EventKit stays in `RemindersSync`. When `unsupported`, the other fields don't matter.
 public struct RemoteRecurrence: Equatable, Sendable {
     public enum Frequency: Sendable { case daily, weekly, monthly, yearly }
 
@@ -19,7 +19,8 @@ public struct RemoteRecurrence: Equatable, Sendable {
     public var interval: Int
     /// Calendar weekday numbers (1 = Sunday) the rule picks, if any.
     public var weekdays: [Int]
-    /// The rule ends, or pins days of the month, weeks or positions, which Perch's repeats can't say.
+    /// Perch's repeats can't say this rule: it ends, is one of several, has an unknown frequency, or pins months, days of
+    /// the month or year, weeks of the year, positions, or an nth weekday like "first Monday".
     public var unsupported: Bool
 
     public init(frequency: Frequency, interval: Int, weekdays: [Int] = [], unsupported: Bool = false) {
@@ -29,9 +30,11 @@ public struct RemoteRecurrence: Equatable, Sendable {
         self.unsupported = unsupported
     }
 
-    /// The same repeat in Perch's terms, or nil when Perch can't express it.
-    public var repeatRule: RepeatRule? {
-        let days = Array(Set(weekdays)).sorted()
+    /// The same repeat in Perch's terms, or nil when Perch can't express it. `dueWeekday` is the reminder's own weekday.
+    public func repeatRule(dueWeekday: Int? = nil) -> RepeatRule? {
+        var days = Array(Set(weekdays)).sorted()
+        // Weekly on its own day is a plain weekly repeat, which can also skip weeks.
+        if frequency == .weekly, let dueWeekday, days == [dueWeekday] { days = [] }
         guard !unsupported, interval >= 1, days.allSatisfy((1...7).contains) else { return nil }
         guard !days.isEmpty else {
             let kind: RepeatRule.Kind = switch frequency {
@@ -42,7 +45,8 @@ public struct RemoteRecurrence: Equatable, Sendable {
             }
             return RepeatRule(kind: kind, interval: interval)
         }
-        // Perch's chosen-days repeat is every week, so "every 2 weeks on Monday" has no equivalent.
+        // Perch's chosen days only work on a weekly repeat that runs every week, so other frequencies with days, or
+        // "every 2 weeks on Monday and Thursday", have no equivalent.
         guard frequency == .weekly, interval == 1 else { return nil }
         return days == [2, 3, 4, 5, 6] ? RepeatRule(kind: .weekdays) : RepeatRule(kind: .weekly, weekdays: days)
     }
@@ -73,6 +77,10 @@ public struct RemoteReminder: Equatable, Sendable {
         self.recurrence = recurrence
         self.modifiedAt = modifiedAt
     }
+
+    func repeatRule(calendar: Calendar) -> RepeatRule? {
+        recurrence?.repeatRule(dueWeekday: due.map { Day.weekday($0.day, calendar: calendar) })
+    }
 }
 
 public enum SyncAction: Equatable, Sendable {
@@ -85,6 +93,7 @@ public enum SyncAction: Equatable, Sendable {
     case deleteRemote(String)
     /// Takes the repeat rule off a reminder whose repeat Perch now owns, so Reminders can't also make the next one.
     case stripRecurrence(String)
+    /// Sets the task's repeat from Reminders, or clears it (nil) when Reminders keeps a rule Perch can't express.
     case adoptRepeat(UUID, RepeatRule?)
 }
 
@@ -132,7 +141,8 @@ public enum Reconciler {
         }
     }
 
-    /// Decides what one sync pass should do. On a conflict the most recent edit wins.
+    /// Decides what one sync pass should do. On a conflict the most recent edit wins, except that a repeat rule in
+    /// Reminders always does.
     public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -153,10 +163,10 @@ public enum Reconciler {
                 actions.append(massLoss || task.isCompleted ? .unlink(task.id) : .deleteLocal(task.id))
                 continue
             }
-            // Perch makes each occurrence itself. A rule it can't express stays in Reminders, and the task gets no repeat
-            // here, so nothing comes twice.
-            if let recurrence = item.recurrence {
-                let rule = recurrence.repeatRule
+            // Perch makes each occurrence itself, so a rule set in Reminders moves here and comes off the reminder. One Perch
+            // can't express stays in Reminders and drops the task's own repeat, so nothing comes twice.
+            if item.recurrence != nil {
+                let rule = item.repeatRule(calendar: calendar)
                 if rule != nil { actions.append(.stripRecurrence(remoteId)) }
                 if task.repeatRule != rule { actions.append(.adoptRepeat(task.id, rule)) }
             }
@@ -173,7 +183,7 @@ public enum Reconciler {
         let known = Set(linked.map { $0.remoteId! }).union(pendingDeletes)
         for item in remote where !item.completed && !known.contains(item.id) {
             actions.append(.importLocal(item))
-            if item.recurrence?.repeatRule != nil { actions.append(.stripRecurrence(item.id)) }
+            if item.repeatRule(calendar: calendar) != nil { actions.append(.stripRecurrence(item.id)) }
         }
         return actions
     }
@@ -211,7 +221,7 @@ extension Workspace {
         task.reminderAt = item.due?.time
         // A reminder already in the past shouldn't ring again here just because it arrived now.
         if let at = task.reminderAt, at <= now { task.reminderFiredAt = now }
-        task.repeatRule = item.recurrence?.repeatRule
+        task.repeatRule = item.repeatRule(calendar: calendar)
         task.remoteId = item.id
         task.modifiedAt = item.modifiedAt
         task.order = (open(on: task.day).map(\.order).max() ?? 0) + 1
@@ -234,10 +244,19 @@ extension Workspace {
         data.tasks[i].remoteId = remoteId
     }
 
-    /// Takes a repeat set in the Reminders app. Like `setRemoteId`, it isn't a local edit, so the change time stays.
+    /// Sets the task's repeat from Reminders, or clears it (nil) when Reminders keeps a rule Perch can't express. Like
+    /// `setRemoteId`, it isn't a local edit, so the change time stays.
     public func setRemoteRepeat(_ rule: RepeatRule?, for id: UUID) {
         guard let i = data.tasks.firstIndex(where: { $0.id == id }), data.tasks[i].repeatRule != rule else { return }
-        data.tasks[i].repeatRule = rule
+        var tasks = data.tasks
+        tasks[i].repeatRule = rule
+        // Finished here before the rule arrived, and the rule comes off the reminder: make the next one now.
+        if let rule, tasks[i].isCompleted, tasks[i].spawnedNextId == nil {
+            let next = nextInstance(of: tasks[i], rule: rule)
+            tasks[i].spawnedNextId = next.id
+            tasks.append(next)
+        }
+        data.tasks = tasks
     }
 
     public func clearPendingRemoteDeletes(_ ids: [String]) {

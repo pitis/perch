@@ -146,7 +146,7 @@ public final class Workspace {
         data.tasks = tasks
     }
 
-    private func nextInstance(of task: TaskItem, rule: RepeatRule) -> TaskItem {
+    func nextInstance(of task: TaskItem, rule: RepeatRule) -> TaskItem {
         let nextDay = rule.next(from: task.day ?? today, today: today, calendar: calendar)
         var next = task
         next.id = UUID()
