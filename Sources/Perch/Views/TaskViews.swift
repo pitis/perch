@@ -545,6 +545,17 @@ struct TaskEditor: View {
                                 Text("Yearly").tag(RepeatRule.Kind?.some(.yearly))
                             }
                             .labelsHidden().frame(width: 120)
+                            if let rule = task.repeatRule, rule.kind != .weekdays, rule.weekdays?.isEmpty ?? true {
+                                Stepper(value: Binding(
+                                    get: { rule.interval },
+                                    set: { n in ws.update(id) { $0.repeatRule?.interval = max(1, n) } }
+                                ), in: 1...99) {
+                                    Text(every(rule)).font(.system(size: 12))
+                                }
+                            }
+                        }
+                        if let rule = task.repeatRule, rule.kind == .weekly {
+                            row("On") { weekdayToggles(rule, anchor: Day.weekday(task.day ?? ws.today, calendar: cal)) }
                         }
                         row("Focus for") {
                             Stepper(value: Binding(
@@ -607,6 +618,43 @@ struct TaskEditor: View {
             .foregroundStyle(.white)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
             .environment(\.colorScheme, .dark)
+        }
+    }
+
+    private func every(_ rule: RepeatRule) -> String {
+        let unit = [RepeatRule.Kind.daily: "day", .weekly: "week", .monthly: "month", .yearly: "year"][rule.kind] ?? "day"
+        return rule.interval == 1 ? "every \(unit)" : "every \(rule.interval) \(unit)s"
+    }
+
+    /// With no days chosen, a weekly repeat follows the task's own weekday, so that day shows as chosen.
+    private func weekdayToggles(_ rule: RepeatRule, anchor: Int) -> some View {
+        let cal = ws.calendar
+        let chosen = Set(rule.weekdays.flatMap { $0.isEmpty ? nil : $0 } ?? [anchor])
+        return HStack(spacing: 3) {
+            ForEach(0..<7, id: \.self) { i in
+                let weekday = (cal.firstWeekday - 1 + i) % 7 + 1
+                let on = chosen.contains(weekday)
+                Button {
+                    var days = chosen
+                    if on { days.remove(weekday) } else { days.insert(weekday) }
+                    let plain = days.isEmpty || days == [anchor]
+                    ws.update(id) { t in
+                        t.repeatRule?.weekdays = plain ? nil : days.sorted()
+                        // Chosen days repeat every week, so an interval would be silently ignored.
+                        if !plain { t.repeatRule?.interval = 1 }
+                    }
+                } label: {
+                    Text(cal.shortWeekdaySymbols[weekday - 1])
+                        .font(.system(size: 10, weight: on ? .semibold : .regular))
+                        .frame(width: 30, height: 20)
+                        .background(on ? Theme.accent.opacity(0.85) : .white.opacity(0.08), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(cal.weekdaySymbols[weekday - 1])
+                .accessibilityLabel(cal.weekdaySymbols[weekday - 1])
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
         }
     }
 

@@ -22,6 +22,13 @@ enum Snapshot {
         hub.ui.mode = .open
         hub.ui.editingTask = hub.workspace.open(on: hub.workspace.today).first?.id
         render(hub, name: "editor", folder: folder)
+        if let gym = hub.workspace.data.tasks.first(where: { $0.repeatRule != nil }) {
+            hub.ui.editingTask = gym.id
+            hub.workspace.update(gym.id) { $0.repeatRule = RepeatRule(kind: .weekly, interval: 2) }
+            render(hub, name: "editor-repeat-every", folder: folder)
+            hub.workspace.update(gym.id) { $0.repeatRule = RepeatRule(kind: .weekly, weekdays: [2, 4, 6]) }
+            render(hub, name: "editor-repeat-days", folder: folder)
+        }
         hub.ui.editingTask = nil
 
         hub.ui.mode = .activity
