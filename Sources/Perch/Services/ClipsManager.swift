@@ -102,7 +102,7 @@ final class ClipsManager {
 
     /// Clears out clips whose files were deleted or moved since they were added, off the main thread. Files in a
     /// protected folder are skipped unless it holds the screenshot folder Perch watches, because checking them
-    /// could raise a macOS prompt. Their clips stay until you copy or open one whose file is gone (see `ifPresent`).
+    /// could raise a macOS prompt, so their clips stay even after the file is gone.
     func pruneMissing() {
         let paths = clips.compactMap(\.path).filter { !ProtectedFolders.mayPrompt($0, granted: watchedFolder) }
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -266,11 +266,11 @@ final class ClipsManager {
     /// Called with a clip removed because copying or opening it found its file gone, so the panel can say so.
     @ObservationIgnored var onGone: ((Clip) -> Void)?
 
-    /// Runs `use` unless the clip's file is gone (a denied permission counts as there), checked off the main thread,
-    /// because a file in a protected folder can wait on a macOS prompt. A gone clip is removed instead, and nothing
-    /// else changes.
+    /// Runs `use` unless the clip's file is gone (a denied permission counts as there), checked off the main thread.
+    /// A gone clip is removed instead, and nothing else changes. Files in a protected folder Perch hasn't been granted
+    /// aren't checked, because that could raise a macOS prompt, so their clips behave as before.
     private func ifPresent(_ clip: Clip, _ use: @escaping () -> Void) {
-        guard clip.text == nil, let path = clip.path else { return use() }
+        guard clip.text == nil, let path = clip.path, !ProtectedFolders.mayPrompt(path, granted: watchedFolder) else { return use() }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let gone = FileCheck.isGone(path)
             DispatchQueue.main.async {
