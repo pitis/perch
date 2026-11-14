@@ -27,6 +27,11 @@ final class NotchPanel: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
+extension EnvironmentValues {
+    /// True for views in the notch panel, false in the dashboard and other windows.
+    @Entry var inNotch = false
+}
+
 /// Option-N. Carbon's hot keys need no Accessibility permission, unlike a key event monitor.
 private final class HotKey {
     static var action: (() -> Void)?
@@ -67,7 +72,7 @@ final class NotchController {
     }
 
     func start() {
-        let host = NSHostingView(rootView: NotchRootView().environment(hub))
+        let host = NSHostingView(rootView: NotchRootView().environment(hub).environment(\.inNotch, true))
         host.sizingOptions = []
         panel.contentView = host
         panel.ignoresMouseEvents = true

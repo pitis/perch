@@ -146,7 +146,7 @@ public enum Reconciler {
 
     /// Decides what one sync pass should do. On a conflict the most recent edit wins, except that a repeat rule in
     /// Reminders always does.
-    public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
+    public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String], restored: [String] = [],
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // A queued delete missing from the fetch is forgotten even if the list only looks empty for now: if it comes back,
@@ -158,6 +158,7 @@ public enum Reconciler {
         // Many items vanishing at once means the account or list went away, not that you deleted them all.
         // Keep the tasks and relink them instead of wiping the planner.
         let massLoss = missing.count >= 3 && missing.count * 2 >= linked.count
+        let restored = Set(restored)
 
         for task in tasks {
             guard let remoteId = task.remoteId else {
@@ -165,7 +166,8 @@ public enum Reconciler {
                 continue
             }
             guard let item = byId[remoteId] else {
-                actions.append(massLoss || task.isCompleted ? .unlink(task.id) : .deleteLocal(task.id))
+                // A restored link no sync has seen may be one deleted on iPhone before the restore: make it again.
+                actions.append(massLoss || task.isCompleted || restored.contains(remoteId) ? .unlink(task.id) : .deleteLocal(task.id))
                 continue
             }
             // Perch makes each occurrence itself, so a rule set in Reminders moves here and comes off the reminder. One Perch
@@ -267,6 +269,12 @@ extension Workspace {
     public func clearPendingRemoteDeletes(_ ids: [String]) {
         guard !ids.isEmpty else { return }
         data.pendingRemoteDeletes.removeAll { ids.contains($0) }
+    }
+
+    /// Called after a sync pass has looked at these restored links, so from then on a missing reminder means deleted.
+    public func forgetRestoredRemoteIds(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        data.restoredRemoteIds.removeAll { ids.contains($0) }
     }
 
     /// Forgets all links, used when the Reminders list itself is gone. Open tasks are pushed again on the next pass.

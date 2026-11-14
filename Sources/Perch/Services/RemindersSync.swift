@@ -7,7 +7,8 @@ import PerchCore
 ///
 /// Repeats live on the Perch side: each occurrence is its own reminder with no recurrence rule. A rule added in the
 /// Reminders app becomes the task's repeat and comes off the reminder. One Perch can't express stays there, and the
-/// task's own repeat is dropped, so nothing comes twice.
+/// task's own repeat is dropped, so nothing comes twice. Moving the task to the Inbox takes that rule off too, because
+/// EventKit refuses a repeating reminder with no date.
 @Observable
 final class RemindersSync {
     private static let listName = "Perch"
@@ -131,8 +132,9 @@ final class RemindersSync {
     private func apply(reminders: [EKReminder], list: EKCalendar) {
         let byId = Dictionary(reminders.map { (identifier(of: $0), $0) }, uniquingKeysWith: { first, _ in first })
         let remote = reminders.map(snapshot)
-        let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote,
-                                      pendingDeletes: workspace.data.pendingRemoteDeletes, calendar: workspace.calendar)
+        let restored = workspace.data.restoredRemoteIds
+        let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote, pendingDeletes: workspace.data.pendingRemoteDeletes,
+                                      restored: restored, calendar: workspace.calendar)
         var created: [(UUID, EKReminder)] = []
         var finishedDeletes: [String] = []
         do {
@@ -173,6 +175,7 @@ final class RemindersSync {
 
         for (id, reminder) in created { workspace.setRemoteId(identifier(of: reminder), for: id) }
         workspace.clearPendingRemoteDeletes(finishedDeletes)
+        workspace.forgetRestoredRemoteIds(restored) // this pass found each one or unlinked it
 
         for action in actions {
             switch action {
@@ -253,6 +256,8 @@ final class RemindersSync {
         } else {
             reminder.dueDateComponents = nil
             reminder.alarms = nil
+            // EventKit refuses a repeating reminder with no date, and that would fail every pass from then on.
+            reminder.recurrenceRules = nil
         }
     }
 }

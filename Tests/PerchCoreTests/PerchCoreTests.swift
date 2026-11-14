@@ -780,6 +780,38 @@ final class StoreTests: XCTestCase {
                        [.deleteRemote("N2")], "Alpha keeps its reminder rather than getting a new one")
     }
 
+    func testARestoredTaskWhoseReminderIsGoneIsMadeAgainNotTrashed() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
+        alpha.remoteId = "R1"
+        var backup = AppData()
+        backup.tasks = [alpha]
+
+        // Case 1: this Mac still links Alpha to R1, but R1 was deleted on iPhone after the last sync.
+        let (w, _) = makeWorkspace()
+        w.data.tasks = [alpha]
+        w.data.settings.reminderListId = "L"
+        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: [], pendingDeletes: w.data.pendingRemoteDeletes,
+                                       restored: w.data.restoredRemoteIds), [.unlink(alpha.id)],
+                       "unlinked, so the next pass makes its reminder again")
+
+        // Case 2: a Mac that never synced, whose first sync makes a new, empty Perch list.
+        let other = tempURL()
+        try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let (fresh, _) = makeWorkspace()
+        _ = try fresh.restore(backup, keepingCopyIn: Store(url: other))
+        XCTAssertEqual(fresh.data.tasks.first?.remoteId, "R1", "kept, in case the Perch list is still on its way from iCloud")
+        XCTAssertEqual(Reconciler.plan(tasks: fresh.data.tasks, remote: [], pendingDeletes: fresh.data.pendingRemoteDeletes,
+                                       restored: fresh.data.restoredRemoteIds), [.unlink(alpha.id)])
+
+        // Once a sync has seen the reminder, deleting it on iPhone deletes the task again.
+        fresh.forgetRestoredRemoteIds(fresh.data.restoredRemoteIds)
+        XCTAssertEqual(Reconciler.plan(tasks: fresh.data.tasks, remote: [], pendingDeletes: [],
+                                       restored: fresh.data.restoredRemoteIds), [.deleteLocal(alpha.id)])
+    }
+
     func testRestoreChangesNothingIfTheCopyCantBeWritten() {
         let (w, _) = makeWorkspace()
         w.add("current", defaultDay: nil)
