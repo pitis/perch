@@ -26,6 +26,10 @@ public struct Store {
         self.url = url
     }
 
+    /// Neither the data file nor its backup is there. A folder Perch can't read and an unreadable backup also
+    /// load as `.fresh`, but that user has data, so they don't count. Check it before `load`, which can move files.
+    public var isFirstLaunch: Bool { FileCheck.isGone(url.path) && FileCheck.isGone(backup.path) }
+
     public enum LoadResult {
         case fresh
         case loaded(AppData)

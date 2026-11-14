@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mcpSocket: MCPSocketServer?
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var setupWindow: NSWindow?
     private var dashboardWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         try? FileManager.default.createDirectory(at: Store.supportDirectory, withIntermediateDirectories: true)
         let store = Store(url: Store.supportDirectory.appendingPathComponent("store.json"))
+        let firstLaunch = store.isFirstLaunch
         var recoveredFrom: URL?
         let data: AppData
         switch store.load() {
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.recoverFocusAfterLaunch()
         hub = AppHub(workspace: workspace, store: store)
         hub.openSettingsWindow = { [weak self] in self?.showSettings() }
+        hub.openSetupWindow = { [weak self] in self?.showSetup() }
         hub.openDashboardWindow = { [weak self] in self?.showDashboard() }
 
         notch = NotchController(hub: hub)
@@ -51,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mcpSocket?.start()
 
         installStatusItem()
+        if firstLaunch {
+            hub.saveNow() // so setup shows only once, even if this run ends in a crash
+            showSetup()
+        }
 
         if let recoveredFrom {
             let alert = NSAlert()
@@ -58,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "It restored the latest backup. The unreadable file was kept at \(recoveredFrom.path)."
             alert.runModal()
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if setupWindow?.isVisible == true { hub.refreshPermissions() } // back from System Settings, say
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -100,6 +111,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow = window
         }
         present(settingsWindow!)
+    }
+
+    private func showSetup() {
+        notch.close()
+        if setupWindow == nil {
+            let view = SetupView { [weak self] in self?.setupWindow?.close() }.environment(hub)
+            setupWindow = makeWindow(title: "Set Up Perch", size: NSSize(width: 520, height: 420), view: view)
+        }
+        hub.refreshPermissions()
+        present(setupWindow!)
     }
 
     private func showDashboard() {
