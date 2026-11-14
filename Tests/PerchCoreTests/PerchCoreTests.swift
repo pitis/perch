@@ -521,6 +521,29 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(back.notes["2026-11-07"], "hello")
     }
 
+    func testFirstLaunchOnlyWhenNeitherFileIsThere() throws {
+        let url = tempURL()
+        let folder = url.deletingLastPathComponent()
+        let backup = url.appendingPathExtension("bak")
+        let store = Store(url: url)
+        XCTAssertTrue(store.isFirstLaunch)
+
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: backup)
+        guard case .fresh = store.load() else { return XCTFail("an unreadable backup alone loads as fresh") }
+        XCTAssertFalse(store.isFirstLaunch, "but there was data, so it isn't a first launch")
+        try FileManager.default.removeItem(at: backup)
+
+        try Data(#"{"tasks":[]}"#.utf8).write(to: url) // the seed AGENTS.md gives for live runs
+        guard case .loaded = store.load() else { return XCTFail("the seed should load") }
+        XCTAssertFalse(store.isFirstLaunch)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: folder.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+        guard case .fresh = store.load() else { return XCTFail("a folder Perch can't read loads as fresh") }
+        XCTAssertFalse(store.isFirstLaunch, "but it isn't a first launch")
+    }
+
     func testOlderFilesMissingNewFieldsStillLoad() throws {
         let url = tempURL()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

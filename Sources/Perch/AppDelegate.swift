@@ -26,13 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         try? FileManager.default.createDirectory(at: Store.supportDirectory, withIntermediateDirectories: true)
         let store = Store(url: Store.supportDirectory.appendingPathComponent("store.json"))
+        let firstLaunch = store.isFirstLaunch
         var recoveredFrom: URL?
-        var fresh = false
         let data: AppData
         switch store.load() {
-        case .fresh:
-            data = AppData()
-            fresh = true
+        case .fresh: data = AppData()
         case .loaded(let loaded): data = loaded
         case .recovered(let loaded, let aside):
             data = loaded
@@ -56,7 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mcpSocket?.start()
 
         installStatusItem()
-        if fresh { showSetup() }
+        if firstLaunch {
+            hub.saveNow() // so setup shows only once, even if this run ends in a crash
+            showSetup()
+        }
 
         if let recoveredFrom {
             let alert = NSAlert()
@@ -64,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "It restored the latest backup. The unreadable file was kept at \(recoveredFrom.path)."
             alert.runModal()
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if setupWindow?.isVisible == true { hub.refreshPermissions() } // back from System Settings, say
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -114,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let view = SetupView { [weak self] in self?.setupWindow?.close() }.environment(hub)
             setupWindow = makeWindow(title: "Set Up Perch", size: NSSize(width: 520, height: 420), view: view)
         }
-        hub.refreshNotificationStatus() // it may have changed in System Settings since the window last opened
+        hub.refreshPermissions()
         present(setupWindow!)
     }
 

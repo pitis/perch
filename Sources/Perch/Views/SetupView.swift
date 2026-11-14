@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The one-screen setup a fresh install opens with, and Settings › General opens again.
-/// Each row asks through the same path the feature itself uses, so nothing here asks macOS for anything new.
+/// Each row asks through the same path the feature itself uses, so it adds no new kind of permission.
 struct SetupView: View {
     @Environment(AppHub.self) private var hub
     var done: () -> Void
@@ -21,21 +21,31 @@ struct SetupView: View {
 
             VStack(spacing: 0) {
                 row("calendar", "Calendar", "Shows today's events in the Events card. Perch only reads them.") {
-                    if hub.calendar.isConnected { allowed("Connected") } else { Button("Set up", action: hub.calendar.connect) }
+                    if hub.calendar.isConnected {
+                        allowed("Connected")
+                    } else {
+                        switch hub.calendar.status {
+                        case .denied: refused(CalendarService.openPrivacySettings)
+                        case .restricted: Text("Not allowed on this Mac").foregroundStyle(.secondary)
+                        default: Button("Set up", action: hub.calendar.connect)
+                        }
+                    }
                 }
                 Divider()
                 row("bell", "Notifications", "Rings your reminders while Perch is quit.") {
                     switch hub.notificationStatus {
                     case .authorized, .provisional, .ephemeral: allowed("Allowed")
-                    case .denied: Button("Open Settings", action: AppHub.openNotificationSettings)
+                    case .denied: refused(AppHub.openNotificationSettings)
                     default: Button("Set up", action: hub.requestNotifications)
                     }
                 }
                 Divider()
                 row("camera.viewfinder", "Screenshots", "Keeps new screenshots and screen recordings in Clips. macOS asks for the folder they're saved in, usually the Desktop.") {
-                    if hub.workspace.data.settings.captureScreenshots {
-                        allowed("On")
-                    } else {
+                    switch hub.clips.screenshotWatch {
+                    case .watching: allowed("On")
+                    case .starting: ProgressView().controlSize(.small)
+                    case .refused: refused(ClipsManager.openPrivacySettings)
+                    case .off:
                         Button("Set up") {
                             hub.workspace.data.settings.captureScreenshots = true
                             hub.clips.updateScreenshotWatcher()
@@ -68,10 +78,18 @@ struct SetupView: View {
         }
         .padding(.vertical, 10)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(title) // so VoiceOver says which of the three Set up buttons it's on
+        .accessibilityLabel(title) // the group's name tells VoiceOver which feature its button is for
     }
 
     private func allowed(_ text: String) -> some View {
         Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(.secondary)
+    }
+
+    /// macOS won't ask a second time, so the way back is System Settings.
+    private func refused(_ openSettings: @escaping () -> Void) -> some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text("Access was refused").font(.caption).foregroundStyle(.secondary)
+            Button("Open Settings", action: openSettings)
+        }
     }
 }

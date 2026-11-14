@@ -140,7 +140,9 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Dates in any other language Apple's on-device model reads (German, French, Spanish, Japanese…), filled in just after adding, with Apple Intelligence on
 
 **First-run setup** ([#13](https://github.com/pitis/perch/issues/13))
-- One screen on a fresh install that explains Calendar, notifications and screenshots, and sets up or skips each (seen only in renders)
+- The setup screen itself (seen only in renders)
+- Opening once, on the first launch before there's any saved data
+- Setting up or skipping Calendar, notifications and screenshots from it, and Open Settings when access was refused
 - Opening it again from Settings › General
 
 ## Not done: not built yet

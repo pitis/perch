@@ -76,7 +76,7 @@ final class AppHub {
     let calendar = CalendarService()
     let speech = SpeechService()
     let sync: RemindersSync
-    /// nil until `refreshNotificationStatus` runs, which the setup window does each time it opens.
+    /// nil until first read. Only re-read by `refreshPermissions` and after asking, so it can be out of date otherwise.
     var notificationStatus: UNAuthorizationStatus?
 
     @ObservationIgnored weak var notch: NotchController?
@@ -159,12 +159,21 @@ final class AppHub {
     func requestNotifications() {
         askedForNotifications = true
         UserDefaults.standard.set(true, forKey: "askedForNotifications")
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, error in
+            if let error { NSLog("Perch: asking for notifications failed: %@", "\(error)") }
             self?.refreshNotificationStatus()
         }
     }
 
-    func refreshNotificationStatus() {
+    /// What the setup window shows, which can change in System Settings. It calls this when it opens and when
+    /// Perch comes back to the front with it open.
+    func refreshPermissions() {
+        calendar.refresh()
+        if clips.screenshotWatch == .refused { clips.updateScreenshotWatcher() }
+        refreshNotificationStatus()
+    }
+
+    private func refreshNotificationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             DispatchQueue.main.async { self?.notificationStatus = settings.authorizationStatus }
         }
