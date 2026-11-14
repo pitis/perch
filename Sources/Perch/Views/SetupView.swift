@@ -58,7 +58,7 @@ struct SetupView: View {
 
     private func row<Trailing: View>(_ symbol: String, _ title: String, _ detail: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol).font(.title3).frame(width: 26).foregroundStyle(.secondary)
+            Image(systemName: symbol).font(.title3).frame(width: 26).foregroundStyle(.secondary).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline)
                 Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -68,6 +68,7 @@ struct SetupView: View {
         }
         .padding(.vertical, 10)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(title) // so VoiceOver says which of the three Set up buttons it's on
     }
 
     private func allowed(_ text: String) -> some View {
