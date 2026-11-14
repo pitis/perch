@@ -434,7 +434,7 @@ final class ReconcileTests: XCTestCase {
     }
 
     private func plan(_ tasks: [TaskItem], _ remote: [RemoteReminder], pending: [String] = []) -> [SyncAction] {
-        Reconciler.plan(tasks: tasks, remote: remote, pendingDeletes: pending, calendar: utc)
+        Reconciler.plan(tasks: tasks, remote: remote, pendingDeletes: pending, afterRestore: false, calendar: utc)
     }
 
     func testNewItemsFlowBothWays() {
@@ -511,7 +511,7 @@ final class ReconcileTests: XCTestCase {
         w.applyRemote(remote, to: t.id)
         XCTAssertTrue(w.task(t.id)!.isCompleted)
         XCTAssertEqual(w.open(on: "2026-11-08").count, 1, "ticking off on iPhone still creates the next one")
-        XCTAssertEqual(Reconciler.plan(tasks: [w.task(t.id)!], remote: [remote], pendingDeletes: [], calendar: utc), [.unlink(t.id)], "no ping-pong after a pull")
+        XCTAssertEqual(Reconciler.plan(tasks: [w.task(t.id)!], remote: [remote], pendingDeletes: [], afterRestore: false, calendar: utc), [.unlink(t.id)], "no ping-pong after a pull")
     }
 
     func testImportWithoutDateLandsInInbox() {
@@ -750,7 +750,8 @@ final class StoreTests: XCTestCase {
         let reminders = [RemoteReminder(id: "R1", title: "Edited since", modifiedAt: saturday.addingTimeInterval(-60)),
                          RemoteReminder(id: "R3", title: "Added since")]
         let ids = backup.tasks.map(\.id)
-        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes), [
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes,
+                                       afterRestore: w.data.restoredSinceSync), [
             .deleteRemote("R3"),
             .pushRemote(ids[0], remoteId: "R1"),
             .createRemote(ids[1]),
@@ -776,40 +777,44 @@ final class StoreTests: XCTestCase {
         _ = try w.restore(backup, keepingCopyIn: Store(url: url))
 
         let reminders = [RemoteReminder(id: "N1", title: "Alpha"), RemoteReminder(id: "N2", title: "Beta")]
-        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes),
+        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: reminders, pendingDeletes: w.data.pendingRemoteDeletes,
+                                       afterRestore: w.data.restoredSinceSync),
                        [.deleteRemote("N2")], "Alpha keeps its reminder rather than getting a new one")
     }
 
     func testARestoredTaskWhoseReminderIsGoneIsMadeAgainNotTrashed() throws {
-        let url = tempURL()
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        var alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
-        alpha.remoteId = "R1"
-        var backup = AppData()
-        backup.tasks = [alpha]
+        func restore(_ tasks: [TaskItem], into w: Workspace) throws {
+            let url = tempURL()
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var backup = AppData()
+            backup.tasks = tasks
+            _ = try w.restore(backup, keepingCopyIn: Store(url: url))
+        }
+        func firstSync(_ w: Workspace) -> [SyncAction] { // with every reminder missing
+            Reconciler.plan(tasks: w.data.tasks, remote: [], pendingDeletes: w.data.pendingRemoteDeletes, afterRestore: w.data.restoredSinceSync)
+        }
+        let alpha = TaskItem(title: "Alpha", now: saturday.addingTimeInterval(-7200))
+        var linked = alpha
+        linked.remoteId = "R1"
 
-        // Case 1: this Mac still links Alpha to R1, but R1 was deleted on iPhone after the last sync.
+        // Case 1: the backup is from before sync was on, and this Mac gives Alpha back its link to R1. But R1 was deleted
+        // on iPhone after this Mac's last sync.
         let (w, _) = makeWorkspace()
-        w.data.tasks = [alpha]
+        w.data.tasks = [linked]
         w.data.settings.reminderListId = "L"
-        _ = try w.restore(backup, keepingCopyIn: Store(url: url))
-        XCTAssertEqual(Reconciler.plan(tasks: w.data.tasks, remote: [], pendingDeletes: w.data.pendingRemoteDeletes,
-                                       restored: w.data.restoredRemoteIds), [.unlink(alpha.id)],
-                       "unlinked, so the next pass makes its reminder again")
+        try restore([alpha], into: w)
+        XCTAssertEqual(w.data.tasks.first?.remoteId, "R1")
+        XCTAssertEqual(firstSync(w), [.unlink(alpha.id)], "unlinked, so the next pass makes its reminder again")
 
         // Case 2: a Mac that never synced, whose first sync makes a new, empty Perch list.
-        let other = tempURL()
-        try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
         let (fresh, _) = makeWorkspace()
-        _ = try fresh.restore(backup, keepingCopyIn: Store(url: other))
-        XCTAssertEqual(fresh.data.tasks.first?.remoteId, "R1", "kept, in case the Perch list is still on its way from iCloud")
-        XCTAssertEqual(Reconciler.plan(tasks: fresh.data.tasks, remote: [], pendingDeletes: fresh.data.pendingRemoteDeletes,
-                                       restored: fresh.data.restoredRemoteIds), [.unlink(alpha.id)])
+        try restore([linked], into: fresh)
+        XCTAssertEqual(fresh.data.tasks.first?.remoteId, "R1", "kept, in case the Perch list arrives from iCloud before the first sync")
+        XCTAssertEqual(firstSync(fresh), [.unlink(alpha.id)])
 
-        // Once a sync has seen the reminder, deleting it on iPhone deletes the task again.
-        fresh.forgetRestoredRemoteIds(fresh.data.restoredRemoteIds)
-        XCTAssertEqual(Reconciler.plan(tasks: fresh.data.tasks, remote: [], pendingDeletes: [],
-                                       restored: fresh.data.restoredRemoteIds), [.deleteLocal(alpha.id)])
+        // Once a pass has committed, deleting the reminder on iPhone deletes the task again.
+        fresh.data.restoredSinceSync = false
+        XCTAssertEqual(firstSync(fresh), [.deleteLocal(alpha.id)])
     }
 
     func testRestoreChangesNothingIfTheCopyCantBeWritten() {

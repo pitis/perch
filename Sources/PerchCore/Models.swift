@@ -447,9 +447,9 @@ public struct AppData: Codable, Equatable, Sendable {
     public var trash: [TaskItem] = []
     /// Reminders items to remove on the next sync, after their task was deleted here.
     public var pendingRemoteDeletes: [String] = []
-    /// Reminder links a restore brought back that no sync has seen yet. The restore can't tell whether one's reminder
-    /// was deleted on iPhone since, so a missing one is made again rather than sending its task to the trash.
-    public var restoredRemoteIds: [String] = []
+    /// A backup was restored and no sync pass has committed since. This Mac's links may be out of date, or it never
+    /// synced, so until then a missing reminder is made again instead of sending its task to the trash.
+    public var restoredSinceSync = false
     /// Notepad text by day.
     public var notes: [String: String] = [:]
     /// Events ticked off in the Events card, as "eventId@day". Local only: Calendar itself is never written to.
@@ -465,7 +465,7 @@ public struct AppData: Codable, Equatable, Sendable {
         tasks = try c.decode([TaskItem].self, forKey: .tasks)
         trash = c.lenient(.trash, [])
         pendingRemoteDeletes = c.lenient(.pendingRemoteDeletes, [])
-        restoredRemoteIds = c.lenient(.restoredRemoteIds, [])
+        restoredSinceSync = c.lenient(.restoredSinceSync, false)
         notes = c.lenient(.notes, [:])
         checkedEvents = c.lenient(.checkedEvents, [])
         sessions = c.lenient(.sessions, [])

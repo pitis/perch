@@ -452,8 +452,7 @@ public final class Workspace {
             }
             next.pendingRemoteDeletes = inReminders.subtracting(next.tasks.compactMap(\.remoteId)).sorted()
         }
-        // What this Mac knows may be out of date, or it never synced: the first sync decides whether these reminders are still there.
-        next.restoredRemoteIds = next.tasks.compactMap(\.remoteId)
+        next.restoredSinceSync = true
         try store.save(next)
         data = next
         return copy

@@ -94,7 +94,7 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 **Repeats** ([#17](https://github.com/pitis/perch/issues/17))
 - Every few days, weeks, months or years (up to 99), or weekly on chosen weekdays, in the task editor
 - A repeat set in the Reminders app becomes the task's repeat, and the rule comes off the reminder so the next one isn't made twice (unit-tested, never run against real Reminders)
-- A repeat Perch can't express, such as one that ends or every other week on chosen days, stays in Reminders, and the task doesn't repeat here (a repeat set on the task in Perch is cleared). Moving the task to the Inbox takes it off the reminder, since a repeat needs a date
+- A repeat Perch can't express, such as one that ends or every other week on chosen days, stays in Reminders, and the task doesn't repeat here (a repeat set on the task in Perch is cleared). Moving such a task to the Inbox takes the rule off the reminder, because Reminders can't repeat a reminder with no date, so it then repeats nowhere
 
 **External monitors and full-screen** ([#5](https://github.com/pitis/perch/issues/5))
 - A drawn notch on monitors, and following the pointer between screens

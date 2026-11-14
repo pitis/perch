@@ -28,7 +28,7 @@ final class NotchPanel: NSPanel {
 }
 
 extension EnvironmentValues {
-    /// True for views in the notch panel, false in the dashboard and other windows.
+    /// Set only on the notch panel's host, for what that non-activating panel needs. Snapshots render with false.
     @Entry var inNotch = false
 }
 

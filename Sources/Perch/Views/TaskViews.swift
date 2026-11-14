@@ -281,7 +281,8 @@ struct TaskRow: View {
         draft = task.title
         renaming = true
         DispatchQueue.main.async {
-            // The notch panel doesn't activate, so it has to be made key to take typing. The dashboard already is.
+            // The notch panel doesn't activate, so it must be made key to take typing. In the dashboard that would take the
+            // keyboard away from this field.
             if inNotch { hub.notch?.panel.makeKey() }
             renameFocused = true
         }
