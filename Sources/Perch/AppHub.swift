@@ -2,6 +2,7 @@ import AppKit
 import NaturalLanguage
 import Observation
 import PerchCore
+import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
 
@@ -56,6 +57,8 @@ final class NotchUI {
     /// Option-N asked for the cursor. The composer takes it as soon as it exists, which may be after this is set.
     var wantsComposerFocus = false
     var toast: Toast?
+    /// Something is typed in a composer, so the panel stays open when the pointer leaves and the draft isn't lost.
+    var hasComposerDraft = false
     var editingTask: UUID?
     var hoveredTask: UUID?
     var swipingTask: UUID?
@@ -272,6 +275,7 @@ final class AppHub {
 
     func show(_ toast: Toast) {
         ui.toast = toast
+        AccessibilityNotification.Announcement(toast.text).post()
         toastWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.ui.toast = nil }
         toastWork = work

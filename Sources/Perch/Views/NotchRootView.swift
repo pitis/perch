@@ -101,7 +101,7 @@ struct NotchRootView: View {
     private var compact: some View {
         if ui.greeting {
             wings(left: AnyView(DotText(text: "WELCOME", pitch: 1.7, maxWidth: Self.wing - 12)),
-                  right: AnyView(DotText(text: "BACK", pitch: 1.7, maxWidth: Self.wing - 12)), spoken: "Welcome back")
+                  right: AnyView(DotText(text: "BACK", pitch: 1.7, maxWidth: Self.wing - 12)), label: "Welcome back")
         } else if focus.isActive {
             switch focus.phase {
             case .running:
@@ -109,28 +109,31 @@ struct NotchRootView: View {
                     let now = context.date
                     wings(left: AnyView(ProgressRing(progress: focus.progress(at: now), isStopwatch: focus.mode == .stopwatch)),
                           right: AnyView(DotText(text: FocusTimer.clock(focus.display(at: now)), pitch: 1.9, maxWidth: Self.wing - 12)),
-                          spoken: "Focus timer, \(Self.spoken(focus.display(at: now)))")
+                          value: Self.spoken(focus.display(at: now)), live: true)
                 }
             case .paused:
                 wings(left: AnyView(DotText(text: FocusTimer.clock(focus.display(at: Date())), pitch: 1.9, maxWidth: Self.wing - 12, color: .white.opacity(0.5))),
                       right: AnyView(DotText(text: "PAUSED", pitch: 1.7, maxWidth: Self.wing - 12)),
-                      spoken: "Focus timer paused, \(Self.spoken(focus.display(at: Date())))")
+                      value: "Paused, \(Self.spoken(focus.display(at: Date())))")
             default:
                 wings(left: AnyView(ProgressRing(progress: 1, isStopwatch: false)),
                       right: AnyView(DotText(text: "DONE", pitch: 1.9, maxWidth: Self.wing - 12, color: Theme.accent)),
-                      spoken: "Focus timer done")
+                      value: "Done")
             }
         }
     }
 
-    private func wings(left: AnyView, right: AnyView, spoken: String) -> some View {
+    /// `live` while the time is counting, so VoiceOver reads it when asked instead of announcing every second.
+    private func wings(left: AnyView, right: AnyView, label: String = "Focus timer", value: String = "", live: Bool = false) -> some View {
         HStack(spacing: 0) {
             left.frame(width: Self.wing)
             Spacer(minLength: ui.geometry.style == .edge ? 8 : ui.geometry.notchWidth)
             right.frame(width: Self.wing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
+        .accessibilityAddTraits(live ? .updatesFrequently : [])
     }
 
     /// "24 minutes, 13 seconds" for VoiceOver, rounded up like `FocusTimer.clock`.
@@ -264,7 +267,7 @@ struct PageHeader: View {
 }
 
 extension Page {
-    /// Command-1 to Command-4 for the tabs in order, then Command-5 for Clips.
+    /// Command and the tab's position, counting from 1, with Clips after the last tab.
     var shortcut: Character { Character(String((Page.tabs.firstIndex(of: self) ?? Page.tabs.count) + 1)) }
 }
 
@@ -309,6 +312,8 @@ struct PageContent: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.accent)
+                        .keyboardShortcut("z", modifiers: .command)
+                        .help("Undo (⌘Z)")
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 8)

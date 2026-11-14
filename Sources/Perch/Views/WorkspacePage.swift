@@ -141,7 +141,7 @@ struct FocusCard: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(caption(focus))
                 .accessibilityValue(NotchRootView.spoken(seconds))
-                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityAddTraits(focus.phase == .running ? .updatesFrequently : [])
             }
             Spacer(minLength: 0)
             controls(focus)

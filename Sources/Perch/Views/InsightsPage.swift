@@ -117,7 +117,7 @@ private struct ChartCard: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(mode == value ? theme.ink : theme.ink2)
                 .padding(.horizontal, 12).padding(.vertical, 3)
-                .background(mode == value ? theme.washStrong : .clear, in: Capsule())
+                .background(mode == value ? theme.wash : .clear, in: Capsule()) // on the toggle's wash, like the Tasks tabs
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
