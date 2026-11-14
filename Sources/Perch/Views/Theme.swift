@@ -12,25 +12,24 @@ struct Theme {
     let bw: Bool
 
     static let accent = Color(hex: 0xE9973F)
-    static let surface = Color(hex: 0x252525)
+    static let surface = Color(hex: Palette.surface)
     static let surfaceRaised = Color(hex: 0x333333)
 
     func card(_ kind: CardConfig.Kind) -> Color {
-        if bw { return Self.surface }
-        switch kind {
-        case .tasks: return Color(hex: 0x93B59C)
-        case .focus: return Color(hex: 0xA39DC4)
-        case .notes: return Color(hex: 0xBFB66E)
-        case .agenda: return Color(hex: 0x98B5CF)
-        }
+        Color(hex: bw ? Palette.surface : Palette.card(kind))
     }
 
-    private var inkBase: Color { bw ? .white : Color(hex: 0x1B1E1A) }
-    var ink: Color { inkBase.opacity(bw ? 0.92 : 1) }
-    var ink2: Color { inkBase.opacity(bw ? 0.6 : 0.66) }
-    var ink3: Color { inkBase.opacity(bw ? 0.36 : 0.42) }
-    var wash: Color { inkBase.opacity(bw ? 0.1 : 0.09) }
-    var washStrong: Color { inkBase.opacity(bw ? 0.18 : 0.16) }
+    private var palette: Palette.Ink { bw ? Palette.onDark : Palette.onCards }
+    private var inkBase: Color { Color(hex: palette.base) }
+    var ink: Color { inkBase.opacity(palette.ink) }
+    /// Secondary text.
+    var ink2: Color { inkBase.opacity(palette.ink2) }
+    /// Lines, handles and chart bars. Too light for text.
+    var ink3: Color { inkBase.opacity(palette.ink3) }
+    var wash: Color { inkBase.opacity(palette.wash) }
+    var washStrong: Color { inkBase.opacity(palette.washStrong) }
+    /// Missed dates.
+    var alert: Color { Color(hex: palette.alert) }
     var scheme: ColorScheme { bw ? .dark : .light }
 }
 

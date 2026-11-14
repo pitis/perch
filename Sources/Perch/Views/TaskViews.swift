@@ -9,6 +9,10 @@ struct TasksCard: View {
     @Environment(AppHub.self) private var hub
     private enum Tab { case todo, completed, overdue }
     @State private var tab = Tab.todo
+    @State private var selected: UUID?
+    @FocusState private var listFocused: Bool
+    /// Down from the composer let the list take focus.
+    @State private var listEntered = false
 
     var body: some View {
         let theme = hub.theme
@@ -18,6 +22,7 @@ struct TasksCard: View {
         let done = ws.completed(on: day)
         let overdue = ws.overdue
         let current = tab == .overdue && overdue.isEmpty ? Tab.todo : tab
+        let shown = current == .todo ? todo : current == .completed ? done : overdue
 
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -36,10 +41,8 @@ struct TasksCard: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 0) {
                     switch current {
-                    case .todo:
-                        ForEach(todo) { TaskRow(task: $0) }
-                    case .completed:
-                        ForEach(done) { TaskRow(task: $0) }
+                    case .todo, .completed:
+                        ForEach(shown) { TaskRow(task: $0, selected: selected == $0.id) }
                     case .overdue:
                         HStack(spacing: 10) {
                             Text("Move all to").font(.system(size: 11)).foregroundStyle(theme.ink2)
@@ -51,10 +54,13 @@ struct TasksCard: View {
                             Spacer()
                         }
                         .padding(.vertical, 4)
-                        ForEach(overdue) { TaskRow(task: $0, showsDay: true) }
+                        ForEach(overdue) { TaskRow(task: $0, showsDay: true, selected: selected == $0.id) }
                     }
                 }
             }
+            .modifier(TaskListKeys(ids: shown.map(\.id), selected: $selected, focused: $listFocused, entered: listEntered,
+                                   onExitUp: { hub.ui.wantsComposerFocus = true }))
+            .onChange(of: listFocused) { if !listFocused { listEntered = false } }
             .frame(maxHeight: .infinity)
             .overlay {
                 if current == .todo, todo.isEmpty {
@@ -67,12 +73,20 @@ struct TasksCard: View {
             .onDrop(of: [.plainText], isTargeted: nil) { _ in hub.dropTask(on: day, before: nil) }
 
             HStack(alignment: .bottom, spacing: 8) {
-                Composer(defaultDay: day, autofocus: true)
+                Composer(defaultDay: day, autofocus: true, onDownArrow: shown.isEmpty ? nil : enterList)
                 if current == .todo, todo.count > 1 {
-                    Text("Drag to reorder").font(.system(size: 10)).foregroundStyle(theme.ink3).fixedSize().padding(.bottom, 7)
+                    Text("Drag to reorder").font(.system(size: 10)).foregroundStyle(theme.ink2).fixedSize().padding(.bottom, 7)
                 }
             }
         }
+    }
+
+    /// Down in the empty composer moves into the list, so the arrow keys work without Keyboard navigation.
+    private func enterList() {
+        listEntered = true
+        DispatchQueue.main.async { listFocused = true } // once the list has become focusable
+        // If focus didn't move, a click must still not take it from the composer.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !listFocused { listEntered = false } }
     }
 
     private func title(_ day: String) -> String {
@@ -88,13 +102,74 @@ struct TasksCard: View {
         return Button { tab = value } label: {
             HStack(spacing: 5) {
                 Text(label).font(.system(size: 11, weight: current == value ? .semibold : .regular))
-                Text("\(count)").font(.system(size: 11)).foregroundStyle(theme.ink2)
+                Text("\(count)").font(.system(size: 11)).foregroundStyle(current == value ? theme.ink : theme.ink2)
             }
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(current == value ? theme.washStrong : .clear, in: RoundedRectangle(cornerRadius: 6))
+            // A wash on the bar's wash, as dark as text on it can sit (PaletteTests).
+            .background(current == value ? theme.wash : .clear, in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(current == value ? .isSelected : [])
+    }
+}
+
+/// Keyboard use of a task list: Up and Down select, Space completes or reopens, Delete deletes with Undo.
+/// One focus stop for the list, so the composer outside it never gets these keys. Fields inside the list (a rename,
+/// the Week composer), the open task editor and the date picker are handled by `isTyping`.
+private struct TaskListKeys: ViewModifier {
+    @Environment(AppHub.self) private var hub
+    let ids: [UUID]
+    @Binding var selected: UUID?
+    var focused: FocusState<Bool>.Binding
+    /// Entered with Down from the composer. Otherwise a click mustn't take focus from the composer, so the list joins
+    /// Tab only with Keyboard navigation on, like a button.
+    var entered = false
+    /// Up from the first task. Without it, Up stops there.
+    var onExitUp: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content
+                .focusable(!ids.isEmpty, interactions: entered ? .edit : .activate)
+                .focused(focused)
+                // The selected row's outline shows where the keys act.
+                .focusEffectDisabled()
+                .onChange(of: focused.wrappedValue) {
+                    // Clicks don't focus the list, so it only gets focus from the keyboard, and then selects a task.
+                    selected = focused.wrappedValue ? selected ?? ids.first : nil
+                }
+                .onChange(of: selected) {
+                    if let selected { proxy.scrollTo(selected) }
+                }
+                .onKeyPress(.upArrow) { move(-1) }
+                .onKeyPress(.downArrow) { move(1) }
+                .onKeyPress(.space) { act { hub.workspace.setCompleted($0.id, !$0.isCompleted) } }
+                .onKeyPress(keys: [.delete, .deleteForward]) { _ in act { hub.deleteTask($0.id) } }
+        }
+    }
+
+    /// A rename, a field inside the list, the open task editor and the open date picker keep their keys.
+    private var isTyping: Bool {
+        hub.ui.editingTask != nil || hub.ui.pickingDay != nil || NSApp.keyWindow?.firstResponder is NSTextView
+    }
+
+    private func move(_ offset: Int) -> KeyPress.Result {
+        guard !isTyping else { return .ignored }
+        if offset < 0, selected == ids.first, let onExitUp {
+            onExitUp()
+            return .handled
+        }
+        selected = ListSelection.move(selected, by: offset, in: ids)
+        return .handled
+    }
+
+    /// Completing, reopening or deleting takes the task out of this list, so the selection moves to its neighbour.
+    private func act(_ action: (TaskItem) -> Void) -> KeyPress.Result {
+        guard !isTyping, let id = selected, ids.contains(id), let task = hub.workspace.task(id) else { return .ignored }
+        selected = ListSelection.afterRemoving(id, from: ids)
+        action(task)
+        return .handled
     }
 }
 
@@ -105,6 +180,8 @@ struct TaskRow: View {
     let task: TaskItem
     var showsDay = false
     var compact = false
+    /// Picked with the arrow keys.
+    var selected = false
 
     @State private var hovering = false
     @State private var renaming = false
@@ -129,6 +206,8 @@ struct TaskRow: View {
             }
             content
                 .background(isFocusing ? theme.wash : .clear, in: RoundedRectangle(cornerRadius: 9))
+                // An outline, not a fill, so the row's text keeps its contrast.
+                .overlay { if selected { RoundedRectangle(cornerRadius: 9).stroke(theme.ink2, lineWidth: 1.5) } }
                 .offset(x: isSwiping ? hub.ui.swipeOffset : 0)
         }
         .overlay(alignment: .top) {
@@ -136,6 +215,12 @@ struct TaskRow: View {
         }
         .dottedDivider(theme.ink3)
         .contentShape(Rectangle())
+        // One stop for VoiceOver that says what the task is. Its buttons stay inside, and the two common ones are actions.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(([task.title] + (task.isCompleted ? ["Done"] : []) + metaItems.map(\.spoken)).joined(separator: ", "))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAction(named: task.isCompleted ? "Mark not done" : "Mark done") { hub.workspace.setCompleted(task.id, !task.isCompleted) }
+        .accessibilityAction(named: "Delete") { hub.deleteTask(task.id) }
         .onHover { inside in
             hovering = inside
             if inside {
@@ -184,7 +269,7 @@ struct TaskRow: View {
                 meta
             }
             Spacer(minLength: 4)
-            if !task.isCompleted, !compact || hovering { actions }
+            if !task.isCompleted, !compact || hovering || selected { actions }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 6)
@@ -219,7 +304,9 @@ struct TaskRow: View {
                             if let symbol = item.symbol { Image(systemName: symbol).font(.system(size: 9)) }
                             Text(item.text).font(.system(size: 10, weight: item.bold ? .semibold : .regular)).lineLimit(1)
                         }
-                        .foregroundStyle(item.alert ? Color(hex: 0xA3341F) : theme.ink2)
+                        .foregroundStyle(item.alert ? theme.alert : theme.ink2)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(item.spoken)
                     }
                 }
             }
@@ -229,6 +316,8 @@ struct TaskRow: View {
     private struct Meta {
         var symbol: String?
         var text: String
+        /// What VoiceOver says, since the symbol that tells a reminder from a deadline isn't read.
+        var spoken: String
         var bold = false
         var alert = false
     }
@@ -237,30 +326,37 @@ struct TaskRow: View {
         var items: [Meta] = []
         let ws = hub.workspace
         if showsDay, let day = task.day {
-            items.append(Meta(symbol: nil, text: Day.label(day, today: ws.today, calendar: ws.calendar), alert: true))
+            let label = Day.label(day, today: ws.today, calendar: ws.calendar)
+            items.append(Meta(symbol: nil, text: label, spoken: "Planned for \(label)", alert: true))
         }
-        if isFocusing { items.append(Meta(symbol: nil, text: focus.phase == .running ? "Focusing" : "Paused")) }
+        if isFocusing {
+            let state = focus.phase == .running ? "Focusing" : "Paused"
+            items.append(Meta(symbol: nil, text: state, spoken: state))
+        }
         if task.focusedSeconds >= 60 {
-            items.append(Meta(symbol: nil, text: "Focused · \(task.focusedSeconds / 60) min"))
+            items.append(Meta(symbol: nil, text: "Focused · \(task.focusedSeconds / 60) min", spoken: "Focused \(task.focusedSeconds / 60) minutes"))
         } else if let minutes = task.plannedMinutes {
-            items.append(Meta(symbol: nil, text: "\(minutes) min"))
+            items.append(Meta(symbol: nil, text: "\(minutes) min", spoken: "\(minutes) minutes planned"))
         }
         if task.priority != .none {
-            items.append(Meta(symbol: "flag.fill", text: task.priority.label, bold: task.priority == .high))
+            items.append(Meta(symbol: "flag.fill", text: task.priority.label, spoken: "\(task.priority.label) priority", bold: task.priority == .high))
         }
-        if let project = task.project { items.append(Meta(symbol: Self.symbol(project: project), text: project)) }
+        if let project = task.project { items.append(Meta(symbol: Self.symbol(project: project), text: project, spoken: "Project \(project)")) }
         if !task.steps.isEmpty {
-            items.append(Meta(symbol: "checklist", text: "\(task.steps.filter(\.done).count)/\(task.steps.count)"))
+            let done = task.steps.filter(\.done).count
+            items.append(Meta(symbol: "checklist", text: "\(done)/\(task.steps.count)", spoken: "\(done) of \(task.steps.count) steps done"))
         }
         if let at = task.effectiveReminder {
             let day = Day.key(at, calendar: ws.calendar)
             let time = at.formatted(date: .omitted, time: .shortened)
-            items.append(Meta(symbol: "bell", text: day == (task.day ?? ws.today) ? time : "\(Day.label(day, today: ws.today, calendar: ws.calendar)) \(time)"))
+            let text = day == (task.day ?? ws.today) ? time : "\(Day.label(day, today: ws.today, calendar: ws.calendar)) \(time)"
+            items.append(Meta(symbol: "bell", text: text, spoken: "Reminder \(text)"))
         }
-        if let rule = task.repeatRule { items.append(Meta(symbol: "repeat", text: rule.label)) }
+        if let rule = task.repeatRule { items.append(Meta(symbol: "repeat", text: rule.label, spoken: "Repeats \(rule.label)")) }
         if let deadline = task.deadline {
-            items.append(Meta(symbol: "flag.checkered", text: Day.label(deadline, today: ws.today, calendar: ws.calendar),
-                              alert: deadline < ws.today && !task.isCompleted))
+            let label = Day.label(deadline, today: ws.today, calendar: ws.calendar)
+            let late = deadline < ws.today && !task.isCompleted
+            items.append(Meta(symbol: "flag.checkered", text: label, spoken: "Deadline \(label)\(late ? ", missed" : "")", alert: late))
         }
         return items
     }
@@ -310,6 +406,7 @@ struct TaskRow: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help(showsDay ? "Reschedule" : "More")
+            .accessibilityLabel(showsDay ? "Reschedule" : "More")
         }
     }
 }
@@ -366,6 +463,8 @@ struct Composer: View {
     var placeholder = "Add a task…"
     var dark = false
     var onFinish: (() -> Void)?
+    /// Down with nothing typed.
+    var onDownArrow: (() -> Void)?
 
     @State private var text = ""
     @State private var voiceOwner = UUID()
@@ -380,12 +479,17 @@ struct Composer: View {
             if !text.isEmpty, parsed.hasDetails { preview }
             HStack(spacing: 6) {
                 Image(systemName: "plus").font(.system(size: 11, weight: .medium)).foregroundStyle(theme.ink2)
-                TextField("", text: $text, prompt: Text(placeholder).foregroundColor(theme.ink3))
+                TextField("", text: $text, prompt: Text(placeholder).foregroundColor(theme.ink2))
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .focused($focused)
                     .onSubmit(submit)
                     .onExitCommand { onFinish?() }
+                    .onKeyPress(.downArrow) {
+                        guard text.isEmpty, let onDownArrow else { return .ignored }
+                        onDownArrow()
+                        return .handled
+                    }
                 IconButton(symbol: listening ? "stop.circle.fill" : "mic", help: listening ? "Stop dictating" : "Dictate", color: theme.ink2, size: 12) {
                     hub.speech.toggle(owner: voiceOwner) { text = $0 }
                 }
@@ -404,6 +508,8 @@ struct Composer: View {
         .onAppear {
             if onFinish != nil { focused = true }
         }
+        .onChange(of: text) { hub.ui.hasComposerDraft = !text.isEmpty }
+        .onDisappear { hub.ui.hasComposerDraft = false }
     }
 
     private var preview: some View {
@@ -593,6 +699,7 @@ struct TaskEditor: View {
                                             Image(systemName: step.done ? "checkmark.circle.fill" : "circle").font(.system(size: 13))
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityLabel(step.done ? "Mark step not done" : "Mark step done")
                                         Text(step.title).font(.system(size: 12)).strikethrough(step.done).lineLimit(1)
                                         Spacer()
                                         IconButton(symbol: "xmark", help: "Remove step", color: .white.opacity(0.5), size: 8) {
@@ -782,6 +889,8 @@ private struct WeekColumn: View {
     let day: String?
     @State private var adding = false
     @State private var targeted = false
+    @State private var selected: UUID?
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         let ws = hub.workspace
@@ -796,7 +905,7 @@ private struct WeekColumn: View {
             }
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 0) {
-                    ForEach(tasks) { TaskRow(task: $0, compact: true) }
+                    ForEach(tasks) { TaskRow(task: $0, compact: true, selected: selected == $0.id) }
                 }
                 if adding {
                     Composer(defaultDay: day, placeholder: "Task…", dark: true, onFinish: { adding = false })
@@ -807,13 +916,14 @@ private struct WeekColumn: View {
                             Text("Add task").font(.system(size: 12))
                             Spacer()
                         }
-                        .foregroundStyle(theme.ink3)
+                        .foregroundStyle(theme.ink2)
                         .padding(.vertical, 6)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .modifier(TaskListKeys(ids: tasks.map(\.id), selected: $selected, focused: $listFocused))
         }
         .padding(10)
         .frame(maxHeight: .infinity, alignment: .top)

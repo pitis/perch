@@ -356,7 +356,8 @@ final class NotchController {
     }
 
     private var mayAutoClose: Bool {
-        guard !stickyKeyboard, ui.editingTask == nil, ui.pickingDay == nil, ui.draggingTask == nil, ui.draggingCard == nil,
+        guard !stickyKeyboard, !ui.hasComposerDraft, ui.editingTask == nil, ui.pickingDay == nil, ui.draggingTask == nil,
+              ui.draggingCard == nil,
               hub.speech.activeOwner == nil, NSEvent.pressedMouseButtons == 0,
               RunLoop.current.currentMode != .eventTracking else { return false }
         // Don't vanish mid-sentence just because the pointer moved.

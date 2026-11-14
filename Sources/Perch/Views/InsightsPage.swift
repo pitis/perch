@@ -94,6 +94,8 @@ private struct ChartCard: View {
             GeometryReader { geometry in
                 chart(height: geometry.size.height - 34)
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(mode == .tasks ? "Tasks completed of planned, last 7 days" : "Focus time, last 7 days")
 
             if mode == .tasks {
                 HStack(spacing: 12) {
@@ -115,10 +117,11 @@ private struct ChartCard: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(mode == value ? theme.ink : theme.ink2)
                 .padding(.horizontal, 12).padding(.vertical, 3)
-                .background(mode == value ? theme.washStrong : .clear, in: Capsule())
+                .background(mode == value ? theme.wash : .clear, in: Capsule()) // on the toggle's wash, like the Tasks tabs
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(mode == value ? .isSelected : [])
     }
 
     private func legend(_ color: Color, _ label: String) -> some View {
@@ -143,7 +146,7 @@ private struct ChartCard: View {
                     }
                     bars(day, top: top, height: height - 14)
                     Text(Day.format(day.day, "EEE", calendar: cal)).font(.system(size: 10)).foregroundStyle(theme.ink2)
-                    Text(Day.format(day.day, "d", calendar: cal)).font(.system(size: 9)).foregroundStyle(theme.ink3)
+                    Text(Day.format(day.day, "d", calendar: cal)).font(.system(size: 9)).foregroundStyle(theme.ink2)
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -155,7 +158,10 @@ private struct ChartCard: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(Day.format(day.day, "EEEE d MMMM", calendar: cal)): \(tooltip(day))")
+                .accessibilityLabel(Day.format(day.day, "EEEE d MMMM", calendar: cal))
+                .accessibilityValue(mode == .tasks
+                    ? "\(day.completed) of \(day.planned) tasks done"
+                    : NotchRootView.spoken(TimeInterval(day.focusSeconds)) + " of focus")
             }
         }
     }

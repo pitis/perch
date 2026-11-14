@@ -113,9 +113,23 @@ private struct ClipCard: View {
             Button("Remove") { hub.clips.remove(clip) }
         }
         .task(id: clip.id) { await loadThumbnail() }
+        // With Keyboard navigation on, Tab reaches each clip: Space copies like a click, Return opens like a
+        // double-click, and Command-Delete removes it, which has no Undo and deletes a file Perch saved.
+        .focusable(interactions: .activate)
+        .onKeyPress(.space) { hub.clips.copy(clip); return .handled }
+        .onKeyPress(.return) { hub.clips.open(clip); return .handled }
+        .onKeyPress(keys: [.delete, .deleteForward]) { press in
+            guard press.modifiers.contains(.command) else { return .ignored }
+            hub.clips.remove(clip)
+            return .handled
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(clip.kind.rawValue) clip: \(clip.title)")
+        .accessibilityValue(caption)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { hub.clips.copy(clip) }
+        .accessibilityAction(named: "Open") { hub.clips.open(clip) }
+        .accessibilityAction(named: "Remove") { hub.clips.remove(clip) }
     }
 
     private var pin: some View {

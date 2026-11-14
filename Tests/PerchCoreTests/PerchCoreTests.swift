@@ -1053,3 +1053,58 @@ final class ProtectedFoldersTests: XCTestCase {
         XCTAssertFalse(ProtectedFolders.mayPrompt("\(home)/Pictures/file", granted: nil))
     }
 }
+
+final class ListSelectionTests: XCTestCase {
+    func testArrowsStartAtTheNearEndAndStopAtTheEnds() {
+        let ids = ["a", "b", "c"]
+        XCTAssertEqual(ListSelection.move(nil, by: 1, in: ids), "a", "Down with nothing selected picks the first")
+        XCTAssertEqual(ListSelection.move(nil, by: -1, in: ids), "c", "Up with nothing selected picks the last")
+        XCTAssertEqual(ListSelection.move("a", by: 1, in: ids), "b")
+        XCTAssertEqual(ListSelection.move("c", by: 1, in: ids), "c")
+        XCTAssertEqual(ListSelection.move("a", by: -1, in: ids), "a")
+        XCTAssertEqual(ListSelection.move("gone", by: 1, in: ids), "a", "a selection that left the list starts over")
+        XCTAssertEqual(ListSelection.move("gone", by: -1, in: ids), "c")
+        XCTAssertNil(ListSelection.move("a", by: 1, in: [String]()))
+    }
+
+    func testRemovingTheSelectionSelectsTheNextOneOrElseThePrevious() {
+        let ids = ["a", "b", "c"]
+        XCTAssertEqual(ListSelection.afterRemoving("a", from: ids), "b")
+        XCTAssertEqual(ListSelection.afterRemoving("b", from: ids), "c")
+        XCTAssertEqual(ListSelection.afterRemoving("c", from: ids), "b")
+        XCTAssertNil(ListSelection.afterRemoving("a", from: ["a"]))
+        XCTAssertNil(ListSelection.afterRemoving("gone", from: ids))
+    }
+}
+
+final class PaletteTests: XCTestCase {
+    func testKnownContrastRatios() {
+        XCTAssertEqual(Palette.contrast(0x000000, 0xFFFFFF), 21, accuracy: 0.01)
+        XCTAssertEqual(Palette.contrast(0x777777, 0xFFFFFF), 4.48, accuracy: 0.01)
+        XCTAssertEqual(Palette.blend(0xFFFFFF, 0.5, over: 0x000000), 0x808080)
+    }
+
+    /// WCAG AA: 4.5:1 for text, 3:1 for lines and chart bars, on every card and the washes text sits on.
+    func testEveryCardPassesAA() {
+        let cards = CardConfig.Kind.allCases.map { ("\($0)", Palette.card($0), Palette.onCards) } + [("dark", Palette.surface, Palette.onDark)]
+        for (card, color, ink) in cards {
+            let wash = Palette.blend(ink.base, ink.wash, over: color)
+            let places = [("plain", color), ("wash", wash), ("strong wash", Palette.blend(ink.base, ink.washStrong, over: color)),
+                          ("selected tab", Palette.blend(ink.base, ink.wash, over: wash))]
+            for (place, background) in places {
+                let text = { (alpha: Double) in Palette.contrast(Palette.blend(ink.base, alpha, over: background), background) }
+                XCTAssertGreaterThanOrEqual(text(ink.ink), 4.5, "ink, \(card) \(place)")
+                // A selected tab's count is ink. Secondary text never sits on a strong wash on the Focus card, where
+                // it would need 92% ink.
+                if place != "selected tab", !(card == "focus" && place == "strong wash") {
+                    XCTAssertGreaterThanOrEqual(text(ink.ink2), 4.5, "ink2, \(card) \(place)")
+                }
+                // Missed dates are only in task rows: on the Tasks card or a dark one, plain or behind a focusing task.
+                if ["tasks", "dark"].contains(card), ["plain", "wash"].contains(place) {
+                    XCTAssertGreaterThanOrEqual(Palette.contrast(ink.alert, background), 4.5, "alert, \(card) \(place)")
+                }
+            }
+            XCTAssertGreaterThanOrEqual(Palette.contrast(Palette.blend(ink.base, ink.ink3, over: color), color), 3, "ink3, \(card)")
+        }
+    }
+}

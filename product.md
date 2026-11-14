@@ -155,9 +155,18 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Setting up or skipping Calendar, notifications and screenshots from it, and Open Settings when access was refused
 - Opening it again from Settings › General
 
+**Keyboard and VoiceOver** ([#19](https://github.com/pitis/perch/issues/19))
+- Down in the empty composer moves into the task list. There Up and Down select a task, Space completes or reopens it, Delete deletes it, and Up from the first task goes back to the composer (selection moves are unit-tested)
+- Command-Z undoes a delete while its toast shows, and VoiceOver announces the toast
+- Something typed in the composer keeps the panel open when the pointer leaves
+- Command-1 to Command-4 switch between Workspace, Week, Insights and Customize, and Command-5 opens Clips
+- With Keyboard navigation turned on in System Settings, Tab reaches every button, each task list and each clip: Space copies a clip, Return opens it and Command-Delete removes it
+- VoiceOver reads each task with its reminder, deadline, priority and project, with Mark done and Delete as actions; the timer as Ready, Remaining or Elapsed with the time; each chart bar as its day with the tasks done or the focus time; and each clip with Open and Remove as actions
+- Text is at least 4.5:1, and lines and chart bars at least 3:1, on every card colour and the washes text sits on (WCAG AA, unit-tested)
+
 ## Not done: not built yet
 
-- Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
+Nothing at the moment.
 
 ## Left out on purpose
 
