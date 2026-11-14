@@ -152,6 +152,8 @@ final class RemindersSync {
                     guard let reminder = byId[remoteId] else { continue }
                     try store.remove(reminder, commit: false)
                     removedRemote.append(remoteId)
+                case .dropPendingDelete(let remoteId):
+                    removedRemote.append(remoteId)
                 case .pullLocal, .importLocal, .deleteLocal, .unlink:
                     break
                 }
@@ -173,7 +175,7 @@ final class RemindersSync {
             case .importLocal(let item): workspace.importRemote(item)
             case .deleteLocal(let id): workspace.deleteFromRemote(id)
             case .unlink(let id): workspace.setRemoteId(nil, for: id)
-            case .createRemote, .pushRemote, .deleteRemote: break
+            case .createRemote, .pushRemote, .deleteRemote, .dropPendingDelete: break
             }
         }
         lastSync = Date()

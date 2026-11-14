@@ -43,6 +43,8 @@ public enum SyncAction: Equatable, Sendable {
     case deleteLocal(UUID)
     case unlink(UUID)
     case deleteRemote(String)
+    /// A queued delete whose reminder is already gone, deleted on iPhone say. There's nothing left to delete.
+    case dropPendingDelete(String)
 }
 
 public enum DeadlineLine {
@@ -100,6 +102,10 @@ public enum Reconciler {
         // Many items vanishing at once means the account or list went away, not that you deleted them all.
         // Keep the tasks and relink them instead of wiping the planner.
         let massLoss = missing.count >= 3 && missing.count * 2 >= linked.count
+        // A queued delete whose reminder is gone is done, unless the list looks away and the reminder may come back.
+        if !massLoss && !remote.isEmpty {
+            actions += pendingDeletes.filter { byId[$0] == nil }.map { .dropPendingDelete($0) }
+        }
 
         for task in tasks {
             guard let remoteId = task.remoteId else {
