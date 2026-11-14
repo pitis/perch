@@ -2,6 +2,7 @@ import AppKit
 import PerchCore
 import QuickLookThumbnailing
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Screenshots, recordings and copied items, hung on a line.
 struct ClipsPage: View {
@@ -138,7 +139,9 @@ private struct ClipCard: View {
                 }
         } else {
             VStack(spacing: 4) {
-                Image(systemName: "doc").font(.system(size: 26))
+                // The icon for the file's type, which macOS knows from the name alone, without reading the file.
+                Image(nsImage: NSWorkspace.shared.icon(for: clip.url.flatMap { UTType(tag: $0.pathExtension, tagClass: .filenameExtension, conformingTo: nil) } ?? .data))
+                    .resizable().frame(width: 48, height: 48)
                 Text(clip.title).font(.system(size: 11)).lineLimit(2).multilineTextAlignment(.center)
             }
             .foregroundStyle(.black.opacity(0.55))
@@ -153,8 +156,9 @@ private struct ClipCard: View {
     }
 
     private func loadThumbnail() async {
-        guard thumbnail == nil, let url = clip.url else { return }
-        // Off the main thread, so a macOS prompt for a file in a protected folder can't freeze the panel.
+        // A file in a protected folder Perch hasn't been granted keeps its type icon: reading it could raise a prompt.
+        guard thumbnail == nil, let url = clip.url, !hub.clips.mayPrompt(clip) else { return }
+        // Off the main thread, so a slow volume or a protected place the list misses can't freeze the panel.
         let size = Self.size
         let image = await Task.detached {
             let request = QLThumbnailGenerator.Request(fileAt: url, size: size, scale: 2, representationTypes: .all)
