@@ -133,7 +133,7 @@ final class RemindersSync {
         let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote,
                                       pendingDeletes: workspace.data.pendingRemoteDeletes, calendar: workspace.calendar)
         var created: [(UUID, EKReminder)] = []
-        var removedRemote: [String] = []
+        var finishedDeletes: [String] = []
         do {
             for action in actions {
                 switch action {
@@ -151,7 +151,9 @@ final class RemindersSync {
                 case .deleteRemote(let remoteId):
                     guard let reminder = byId[remoteId] else { continue }
                     try store.remove(reminder, commit: false)
-                    removedRemote.append(remoteId)
+                    finishedDeletes.append(remoteId)
+                case .dropPendingDelete(let remoteId):
+                    finishedDeletes.append(remoteId) // cleared with the deletes, so only once the commit succeeds
                 case .pullLocal, .importLocal, .deleteLocal, .unlink:
                     break
                 }
@@ -165,7 +167,7 @@ final class RemindersSync {
         }
 
         for (id, reminder) in created { workspace.setRemoteId(identifier(of: reminder), for: id) }
-        workspace.clearPendingRemoteDeletes(removedRemote)
+        workspace.clearPendingRemoteDeletes(finishedDeletes)
 
         for action in actions {
             switch action {
@@ -173,7 +175,7 @@ final class RemindersSync {
             case .importLocal(let item): workspace.importRemote(item)
             case .deleteLocal(let id): workspace.deleteFromRemote(id)
             case .unlink(let id): workspace.setRemoteId(nil, for: id)
-            case .createRemote, .pushRemote, .deleteRemote: break
+            case .createRemote, .pushRemote, .deleteRemote, .dropPendingDelete: break
             }
         }
         lastSync = Date()

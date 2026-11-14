@@ -215,7 +215,7 @@ public final class Workspace {
             if let pending = next.pendingRemoteDeletes.firstIndex(of: remote) {
                 next.pendingRemoteDeletes.remove(at: pending)
             } else {
-                // A sync already removed it from Reminders, so it has to be created again.
+                // A sync already removed it from Reminders, or found it gone, so it has to be created again.
                 task.remoteId = nil
             }
         }
