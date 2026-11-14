@@ -447,6 +447,13 @@ final class ReconcileTests: XCTestCase {
         XCTAssertEqual(plan([], [RemoteReminder(id: "R", title: "t")], pending: ["R"]), [.deleteRemote("R")], "deleted here, not re-imported")
     }
 
+    func testAQueuedDeleteWhoseReminderIsAlreadyGoneIsDropped() {
+        let t = linked("t", "R")
+        XCTAssertEqual(plan([t], [RemoteReminder(id: "R", title: "t")], pending: ["gone"]), [.dropPendingDelete("gone")],
+                       "deleted on iPhone before Perch got to it")
+        XCTAssertEqual(plan([], [], pending: ["gone"]), [.dropPendingDelete("gone")], "even when it was the list's last item")
+    }
+
     func testFinishedOnBothSidesUnlinksAndNeverComesBack() {
         var t = linked("t", "R")
         t.completedAt = saturday
