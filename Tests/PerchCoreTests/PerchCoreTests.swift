@@ -847,6 +847,22 @@ final class CardLayoutTests: XCTestCase {
 }
 
 final class ProtectedFoldersTests: XCTestCase {
+    func testAFileIsGoneOnlyWhenNothingIsThere() throws {
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("clip.png")
+        try Data().write(to: file)
+        XCTAssertFalse(FileCheck.isGone(file.path))
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: folder.path)
+        XCTAssertFalse(FileCheck.isGone(file.path), "a file Perch is refused isn't a deleted one")
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        try fm.removeItem(at: file)
+        XCTAssertTrue(FileCheck.isGone(file.path))
+        XCTAssertFalse(FileCheck.isGone("/Volumes/Unplugged-\(UUID().uuidString)/clip.png"), "a drive that's away isn't a deleted file")
+    }
+
     private let folders = ["/Users/me/Desktop", "/Users/me/Documents", "/Volumes"].map { URL(fileURLWithPath: $0) }
 
     private func mayPrompt(_ path: String, granted: String? = nil) -> Bool {

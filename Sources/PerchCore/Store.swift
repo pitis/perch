@@ -100,3 +100,14 @@ public enum ProtectedFolders {
         return granted.flatMap { area($0.path) } != folder
     }
 }
+
+public enum FileCheck {
+    /// Whether nothing is at `path` any more. A file Perch is refused access to still counts as there, so a denied
+    /// permission never looks like a deleted file, and so does one on a drive that isn't plugged in.
+    public static func isGone(_ path: String) -> Bool {
+        guard access(path, F_OK) != 0, errno == ENOENT else { return false }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        if parts.count > 2, parts[0] == "Volumes" { return access("/Volumes/\(parts[1])", F_OK) == 0 }
+        return true
+    }
+}

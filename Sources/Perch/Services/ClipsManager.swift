@@ -112,8 +112,7 @@ final class ClipsManager {
     func pruneMissing() {
         let paths = clips.compactMap(\.path).filter { !ProtectedFolders.mayPrompt($0, granted: watchedFolder) }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            // Only a file that's really gone, not one Perch was refused access to.
-            let missing = Set(paths.filter { Darwin.access($0, F_OK) != 0 && errno == ENOENT })
+            let missing = Set(paths.filter(FileCheck.isGone))
             guard !missing.isEmpty else { return }
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -270,7 +269,36 @@ final class ClipsManager {
 
     // MARK: Using a clip
 
+    /// Called with a clip removed because copying or opening it found its file gone, so the panel can say so.
+    @ObservationIgnored var onGone: ((Clip) -> Void)?
+
+    /// Runs `use` unless the clip's file is gone (a denied permission counts as there), checked off the main thread.
+    /// A gone clip is removed instead, and nothing else changes. Files in a protected folder Perch hasn't been granted
+    /// aren't checked, because that could raise a macOS prompt, so their clips behave as before.
+    private func ifPresent(_ clip: Clip, _ use: @escaping () -> Void) {
+        guard clip.text == nil, let path = clip.path, !mayPrompt(clip) else { return use() }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let gone = FileCheck.isGone(path)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard gone else { return use() }
+                guard self.clips.contains(where: { $0.id == clip.id }) else { return } // removed meanwhile
+                self.remove(clip)
+                self.onGone?(clip)
+            }
+        }
+    }
+
     func copy(_ clip: Clip) {
+        let before = NSPasteboard.general.changeCount
+        ifPresent(clip) { [weak self] in
+            // Something copied while the check waited on a prompt is newer, so it stays on the clipboard.
+            guard NSPasteboard.general.changeCount == before else { return }
+            self?.copyNow(clip)
+        }
+    }
+
+    private func copyNow(_ clip: Clip) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         if let text = clip.text {
@@ -294,7 +322,7 @@ final class ClipsManager {
     func open(_ clip: Clip) {
         if let url = clip.url {
             // Off the main thread: opening may be the first touch of a protected folder, which can wait on a prompt.
-            DispatchQueue.global(qos: .userInitiated).async { NSWorkspace.shared.open(url) }
+            ifPresent(clip) { DispatchQueue.global(qos: .userInitiated).async { NSWorkspace.shared.open(url) } }
         } else if let text = clip.text {
             // Plain text has no file to open, so it goes to the default text editor through a temporary one.
             let file = FileManager.default.temporaryDirectory.appendingPathComponent("Perch clip \(clip.id.uuidString.prefix(6)).txt")
