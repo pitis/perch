@@ -471,6 +471,27 @@ final class ReconcileTests: XCTestCase {
         XCTAssertEqual(plan([], [], pending: ["gone"]), [.dropPendingDelete("gone")], "even when it was the list's last item")
     }
 
+    func testAPushKeepsAlarmsSetOnIPhone() {
+        var timed = TaskItem(title: "call", now: saturday)
+        timed.day = "2026-11-07"
+        timed.reminderAt = saturday.addingTimeInterval(3600)
+        let early = RemoteAlarm.relative(-900)
+
+        let pushed = Reconciler.alarms([.atTime, early, .location], for: timed)
+        XCTAssertEqual(pushed.keep, [false, true, true], "Perch replaces only its own alarm at a set time")
+        XCTAssertEqual(pushed.add, timed.reminderAt)
+
+        var inbox = timed
+        inbox.day = nil
+        inbox.reminderAt = nil
+        let undated = Reconciler.alarms([early, .location], for: inbox)
+        XCTAssertEqual(undated.keep, [false, true], "an early reminder goes with the date, a location stays")
+        XCTAssertNil(undated.add)
+
+        XCTAssertNil(Reconciler.alarms([.relative(0)], for: timed).add, "one set on iPhone at the due time already rings then")
+        XCTAssertEqual(Reconciler.alarms([], for: timed).add, timed.reminderAt)
+    }
+
     func testFinishedOnBothSidesUnlinksAndNeverComesBack() {
         var t = linked("t", "R")
         t.completedAt = saturday

@@ -83,6 +83,16 @@ public struct RemoteReminder: Equatable, Sendable {
     }
 }
 
+/// A reminder's alarm, as far as a push from Perch cares. EventKit stays in `RemindersSync`.
+public enum RemoteAlarm: Equatable, Sendable {
+    /// At a set time, like the one Perch adds.
+    case atTime
+    /// Seconds from the due time, like an early reminder set on iPhone. Negative is before, 0 rings at the due time.
+    case relative(TimeInterval)
+    /// "When I arrive" and the like.
+    case location
+}
+
 public enum SyncAction: Equatable, Sendable {
     case createRemote(UUID)
     case pushRemote(UUID, remoteId: String)
@@ -123,6 +133,22 @@ public enum Reconciler {
     public static func due(of task: TaskItem, calendar: Calendar = .current) -> RemoteDue? {
         if let at = task.reminderAt { return RemoteDue(day: Day.key(at, calendar: calendar), time: at) }
         return task.day.map { RemoteDue(day: $0) }
+    }
+
+    /// Which of a reminder's alarms a push keeps, and the time of Perch's own alarm to add, if any. Perch owns the alarm at
+    /// a set time. Ones set on iPhone stay, except an early reminder once there's no date for it to be early to.
+    public static func alarms(_ current: [RemoteAlarm], for task: TaskItem) -> (keep: [Bool], add: Date?) {
+        let hasDate = task.reminderAt != nil || task.day != nil
+        let keep = current.map { alarm in
+            switch alarm {
+            case .atTime: false
+            case .relative: hasDate
+            case .location: true
+            }
+        }
+        // One set on iPhone at the due time already rings at the task's time, and a second would ring twice.
+        let ringsAtDue = hasDate && current.contains(.relative(0))
+        return (keep, ringsAtDue ? nil : task.reminderAt)
     }
 
     static func sameContent(_ task: TaskItem, _ remote: RemoteReminder, calendar: Calendar) -> Bool {
