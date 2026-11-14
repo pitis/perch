@@ -42,6 +42,11 @@ extension UTType {
     static let perchCard = UTType(exportedAs: "dev.pitis.perch.card")
 }
 
+/// What the inline date picker is choosing a day for.
+enum DayPick: Equatable {
+    case shownDay, task(UUID), overdue
+}
+
 /// View state shared by the notch and the dashboard.
 @Observable
 final class NotchUI {
@@ -57,6 +62,9 @@ final class NotchUI {
     var wantsComposerFocus = false
     var toast: Toast?
     var editingTask: UUID?
+    /// The open date picker. It's an overlay because `NotchController.mayAutoClose` doesn't know about popovers.
+    /// While it's set the panel stays open, and Esc closes the picker first.
+    var pickingDay: DayPick?
     var hoveredTask: UUID?
     var swipingTask: UUID?
     var swipeOffset: CGFloat = 0
@@ -200,6 +208,7 @@ final class AppHub {
         guard let store else { throw CocoaError(.featureUnsupported) }
         let copy = try workspace.restore(backup, keepingCopyIn: store)
         ui.editingTask = nil // the task may not exist in the backup, and an open editor keeps the panel from closing
+        ui.pickingDay = nil
         clips.updateScreenshotWatcher() // the restored settings take effect now, not at the next launch
         calendar.refresh()
         return copy
@@ -297,6 +306,7 @@ final class AppHub {
     func deleteTask(_ id: UUID) {
         guard let title = workspace.task(id)?.title else { return }
         if ui.editingTask == id { ui.editingTask = nil }
+        if ui.pickingDay == .task(id) { ui.pickingDay = nil }
         workspace.delete(id)
         show(Toast(text: "Deleted “\(title)”", undoTask: id))
     }

@@ -222,7 +222,7 @@ struct IconButton: View {
     }
 }
 
-/// `< 7 Nov >`, shared by the tasks and Notepad. Clicking the date jumps back to today.
+/// `< 7 Nov >` on the tasks card. Clicking the date opens the date picker.
 struct DayNavigator: View {
     @Environment(AppHub.self) private var hub
 
@@ -235,7 +235,7 @@ struct DayNavigator: View {
                 hub.ui.selectedDay = Day.adding(-1, to: day, calendar: cal)
             }
             Button {
-                hub.ui.selectedDay = hub.workspace.today
+                hub.ui.pickingDay = .shownDay
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "calendar").font(.system(size: 10))
@@ -246,7 +246,7 @@ struct DayNavigator: View {
                 .background(theme.wash, in: RoundedRectangle(cornerRadius: 7))
             }
             .buttonStyle(.plain)
-            .help("Go to today")
+            .help("Pick a date")
             IconButton(symbol: "chevron.right", help: "Next day", color: theme.ink2, size: 10) {
                 hub.ui.selectedDay = Day.adding(1, to: day, calendar: cal)
             }
