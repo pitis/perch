@@ -452,6 +452,7 @@ public final class Workspace {
             }
             next.pendingRemoteDeletes = inReminders.subtracting(next.tasks.compactMap(\.remoteId)).sorted()
         }
+        next.restoredSinceSync = true
         try store.save(next)
         data = next
         return copy

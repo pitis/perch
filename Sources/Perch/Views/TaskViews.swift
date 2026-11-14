@@ -177,6 +177,7 @@ private struct TaskListKeys: ViewModifier {
 
 struct TaskRow: View {
     @Environment(AppHub.self) private var hub
+    @Environment(\.inNotch) private var inNotch
     let task: TaskItem
     var showsDay = false
     var compact = false
@@ -280,7 +281,9 @@ struct TaskRow: View {
         draft = task.title
         renaming = true
         DispatchQueue.main.async {
-            hub.notch?.panel.makeKey()
+            // The notch panel doesn't activate, so it must be made key to take typing. In the dashboard that would take the
+            // keyboard away from this field.
+            if inNotch { hub.notch?.panel.makeKey() }
             renameFocused = true
         }
     }

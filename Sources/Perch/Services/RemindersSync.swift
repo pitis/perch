@@ -7,7 +7,7 @@ import PerchCore
 ///
 /// Repeats live on the Perch side: each occurrence is its own reminder with no recurrence rule. A rule added in the
 /// Reminders app becomes the task's repeat and comes off the reminder. One Perch can't express stays there, and the
-/// task's own repeat is dropped, so nothing comes twice.
+/// task's own repeat is dropped, so nothing comes twice. Moving the task to the Inbox takes that rule off too.
 @Observable
 final class RemindersSync {
     private static let listName = "Perch"
@@ -112,9 +112,6 @@ final class RemindersSync {
             workspace.data.settings.reminderListId = existing.calendarIdentifier
             return existing
         }
-        // The list we knew about is gone. Forget the links so its absence doesn't read as "you deleted all of these".
-        if settings.reminderListId != nil { workspace.unlinkAllRemote() }
-
         let list = EKCalendar(for: .reminder, eventStore: store)
         list.title = Self.listName
         guard let source = store.defaultCalendarForNewReminders()?.source
@@ -124,6 +121,9 @@ final class RemindersSync {
         }
         list.source = source
         try store.saveCalendar(list, commit: true)
+        // The list we knew about is gone. Forget the links so its absence doesn't read as "you deleted all of these".
+        // Only now that the new list exists, so a failure above keeps them.
+        if settings.reminderListId != nil { workspace.unlinkAllRemote() }
         workspace.data.settings.reminderListId = list.calendarIdentifier
         return list
     }
@@ -131,12 +131,15 @@ final class RemindersSync {
     private func apply(reminders: [EKReminder], list: EKCalendar) {
         let byId = Dictionary(reminders.map { (identifier(of: $0), $0) }, uniquingKeysWith: { first, _ in first })
         let remote = reminders.map(snapshot)
-        let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote,
-                                      pendingDeletes: workspace.data.pendingRemoteDeletes, calendar: workspace.calendar)
+        let afterRestore = workspace.data.restoredSinceSync
+        let actions = Reconciler.plan(tasks: workspace.data.tasks, remote: remote, pendingDeletes: workspace.data.pendingRemoteDeletes,
+                                      afterRestore: afterRestore, calendar: workspace.calendar)
         var created: [(UUID, EKReminder)] = []
         var finishedDeletes: [String] = []
+        var current: SyncAction? // the write EventKit refused, if it refuses one
         do {
             for action in actions {
+                current = action
                 switch action {
                 case .createRemote(let id):
                     guard let task = workspace.task(id) else { continue }
@@ -163,16 +166,25 @@ final class RemindersSync {
                     break
                 }
             }
+            current = nil
             try store.commit()
         } catch {
             // Local changes below wait for the next pass, so a failed write can't leave the two sides half-applied.
             store.reset()
-            statusText = "Sync failed: \(error.localizedDescription)"
+            // The same write fails on every pass, so say which reminder it is.
+            let name: String? = switch current {
+            case .createRemote(let id), .pushRemote(let id, _): workspace.task(id)?.title
+            case .deleteRemote(let remoteId), .stripRecurrence(let remoteId): byId[remoteId]?.title
+            default: nil
+            }
+            NSLog("Perch: Reminders sync failed at %@: %@", String(describing: current), String(describing: error))
+            statusText = "Sync failed" + (name.map { " on “\($0)”" } ?? "") + ": \(error.localizedDescription)"
             return
         }
 
         for (id, reminder) in created { workspace.setRemoteId(identifier(of: reminder), for: id) }
         workspace.clearPendingRemoteDeletes(finishedDeletes)
+        if afterRestore { workspace.data.restoredSinceSync = false } // the actions below unlink any reminder that's missing
 
         for action in actions {
             switch action {
@@ -253,6 +265,8 @@ final class RemindersSync {
         } else {
             reminder.dueDateComponents = nil
             reminder.alarms = nil
+            // EventKit refuses a repeating reminder with no date, and that would fail every pass from then on.
+            reminder.recurrenceRules = nil
         }
     }
 }

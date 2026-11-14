@@ -145,8 +145,8 @@ public enum Reconciler {
     }
 
     /// Decides what one sync pass should do. On a conflict the most recent edit wins, except that a repeat rule in
-    /// Reminders always does.
-    public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
+    /// Reminders always does. `afterRestore` is `AppData.restoredSinceSync`.
+    public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String], afterRestore: Bool,
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // A queued delete missing from the fetch is forgotten even if the list only looks empty for now: if it comes back,
@@ -165,7 +165,9 @@ public enum Reconciler {
                 continue
             }
             guard let item = byId[remoteId] else {
-                actions.append(massLoss || task.isCompleted ? .unlink(task.id) : .deleteLocal(task.id))
+                // Right after a restore, the link may be out of date or this Mac never synced. Unlinking makes the reminder
+                // again on the next pass.
+                actions.append(massLoss || afterRestore || task.isCompleted ? .unlink(task.id) : .deleteLocal(task.id))
                 continue
             }
             // Perch makes each occurrence itself, so a rule set in Reminders moves here and comes off the reminder. One Perch
