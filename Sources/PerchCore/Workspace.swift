@@ -191,7 +191,6 @@ public final class Workspace {
         data.tasks[i] = task
     }
 
-    /// Carries every overdue task forward to today.
     /// Moves every overdue task to `day`, oldest first, after the tasks already there.
     public func carryOverdue(to day: String) {
         for task in overdue { move(task.id, to: day) }
