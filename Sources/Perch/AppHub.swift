@@ -76,9 +76,12 @@ final class AppHub {
     let calendar = CalendarService()
     let speech = SpeechService()
     let sync: RemindersSync
+    /// nil until `refreshNotificationStatus` runs, which the setup window does each time it opens.
+    var notificationStatus: UNAuthorizationStatus?
 
     @ObservationIgnored weak var notch: NotchController?
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
+    @ObservationIgnored var openSetupWindow: () -> Void = {}
     @ObservationIgnored var openDashboardWindow: () -> Void = {}
 
     @ObservationIgnored private let store: Store?
@@ -148,9 +151,28 @@ final class AppHub {
         }
 
         if !askedForNotifications, workspace.data.tasks.contains(where: { $0.reminderAt != nil }) {
-            askedForNotifications = true
-            UserDefaults.standard.set(true, forKey: "askedForNotifications")
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            requestNotifications()
+        }
+    }
+
+    /// macOS only shows its prompt the first time. After that this just reports what's already set.
+    func requestNotifications() {
+        askedForNotifications = true
+        UserDefaults.standard.set(true, forKey: "askedForNotifications")
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
+            self?.refreshNotificationStatus()
+        }
+    }
+
+    func refreshNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async { self?.notificationStatus = settings.authorizationStatus }
+        }
+    }
+
+    static func openNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
     }
 
