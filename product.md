@@ -61,6 +61,11 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Repeating tasks creating their next occurrence (unit-tested)
 - Week view: Inbox beside the next 14 days, dragging between them, and adding from a column
 
+**Picking any date** ([#15](https://github.com/pitis/perch/issues/15))
+- The date on the tasks card opens a calendar to go to any day, with Today to jump back
+- Pick a date… in a task's menu
+- Pick a date… on Overdue, to move everything there at once (unit-tested)
+
 **Notepad** ([#3](https://github.com/pitis/perch/issues/3))
 - Typing and autosave
 - Command-Return turns a line into a task (unit-tested)
@@ -144,10 +149,14 @@ The target is the feature set on [NotchOwl's site](https://www.notchowl.com/) an
 - Romanian task phrases, with or without diacritics: "sună-o pe mama mâine la 5", "chiria până vineri" (unit-tested)
 - Dates in any other language Apple's on-device model reads (German, French, Spanish, Japanese…), filled in just after adding, with Apple Intelligence on
 
+**First-run setup** ([#13](https://github.com/pitis/perch/issues/13))
+- The setup screen itself (seen only in renders)
+- Opening once, on the first launch before there's any saved data
+- Setting up or skipping Calendar, notifications and screenshots from it, and Open Settings when access was refused
+- Opening it again from Settings › General
+
 ## Not done: not built yet
 
-- First-run permission setup or welcome tour ([#13](https://github.com/pitis/perch/issues/13))
-- Picking any date from the date control and Reschedule ([#15](https://github.com/pitis/perch/issues/15))
 - Full keyboard navigation and a VoiceOver pass ([#19](https://github.com/pitis/perch/issues/19))
 
 ## Left out on purpose

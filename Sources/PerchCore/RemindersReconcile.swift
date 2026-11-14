@@ -91,6 +91,9 @@ public enum SyncAction: Equatable, Sendable {
     case deleteLocal(UUID)
     case unlink(UUID)
     case deleteRemote(String)
+    /// A queued delete whose reminder is no longer in the Perch list (deleted on iPhone, moved to another list, or the
+    /// list hasn't finished loading). It's forgotten rather than retried.
+    case dropPendingDelete(String)
     /// Takes the repeat rule off a reminder whose repeat Perch now owns, so Reminders can't also make the next one.
     case stripRecurrence(String)
     /// Sets the task's repeat from Reminders, or clears it (nil) when Reminders keeps a rule Perch can't express.
@@ -146,7 +149,9 @@ public enum Reconciler {
     public static func plan(tasks: [TaskItem], remote: [RemoteReminder], pendingDeletes: [String],
                             calendar: Calendar = .current) -> [SyncAction] {
         let byId = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var actions: [SyncAction] = pendingDeletes.filter { byId[$0] != nil }.map { .deleteRemote($0) }
+        // A queued delete missing from the fetch is forgotten even if the list only looks empty for now: if it comes back,
+        // it comes back as a task. Keeping it would hold the id forever when the reminder is really gone.
+        var actions: [SyncAction] = pendingDeletes.map { byId[$0] != nil ? .deleteRemote($0) : .dropPendingDelete($0) }
 
         let linked = tasks.filter { $0.remoteId != nil }
         let missing = linked.filter { byId[$0.remoteId!] == nil }

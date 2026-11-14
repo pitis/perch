@@ -31,6 +31,10 @@ enum Snapshot {
         }
         hub.ui.editingTask = nil
 
+        hub.ui.pickingDay = .task(hub.workspace.open(on: hub.workspace.today)[1].id)
+        render(hub, name: "pick-date", folder: folder)
+        hub.ui.pickingDay = nil
+
         hub.ui.mode = .activity
         hub.ui.activity = hub.workspace.data.tasks.first { $0.reminderAt != nil }
         render(hub, name: "activity", folder: folder, size: CGSize(width: 480, height: 170))
@@ -45,6 +49,7 @@ enum Snapshot {
         render(hub, name: "compact-greeting", folder: folder, size: CGSize(width: 480, height: 50))
 
         renderView(SettingsView().environment(hub), name: "settings", folder: folder, size: CGSize(width: 560, height: 1400))
+        renderView(SetupView(done: {}).environment(hub).background(Color(nsColor: .windowBackgroundColor)), name: "setup", folder: folder, size: CGSize(width: 520, height: 460))
         renderView(Image(nsImage: PerchedBird.menuBarImage).renderingMode(.template).foregroundStyle(.white)
                        .frame(width: 60, height: 24).background(.black),
                    name: "menubar", folder: folder, size: CGSize(width: 60, height: 24))
